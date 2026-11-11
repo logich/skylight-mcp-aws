@@ -16,12 +16,18 @@ import (
 	"github.com/aws/aws-cdk-go/awscdk/v2/awsapigatewayv2"
 	"github.com/aws/aws-cdk-go/awscdk/v2/awsapigatewayv2authorizers"
 	"github.com/aws/aws-cdk-go/awscdk/v2/awsapigatewayv2integrations"
+	"github.com/aws/aws-cdk-go/awscdk/v2/awscloudwatch"
+	"github.com/aws/aws-cdk-go/awscdk/v2/awscloudwatchactions"
+	"github.com/aws/aws-cdk-go/awscdk/v2/awscodedeploy"
 	"github.com/aws/aws-cdk-go/awscdk/v2/awscognito"
 	"github.com/aws/aws-cdk-go/awscdk/v2/awsdynamodb"
 	"github.com/aws/aws-cdk-go/awscdk/v2/awsiam"
 	"github.com/aws/aws-cdk-go/awscdk/v2/awskms"
 	"github.com/aws/aws-cdk-go/awscdk/v2/awslambda"
 	"github.com/aws/aws-cdk-go/awscdk/v2/awslogs"
+	"github.com/aws/aws-cdk-go/awscdk/v2/awsscheduler"
+	"github.com/aws/aws-cdk-go/awscdk/v2/awssns"
+	"github.com/aws/aws-cdk-go/awscdk/v2/awssnssubscriptions"
 	"github.com/aws/aws-cdk-go/awscdk/v2/awsssm"
 	"github.com/aws/constructs-go/constructs/v10"
 	"github.com/aws/jsii-runtime-go"
@@ -32,6 +38,8 @@ const (
 	resourceServerID = "skylight-mcp"
 	scopeName        = "invoke" // token scope: "skylight-mcp/invoke"
 	allowedSubParam  = "/skylight-mcp/allowed-sub"
+	alertEmailParam  = "/skylight-mcp/alert-email"
+	canaryPayload    = `{"skylight_mcp_canary":true}`
 )
 
 // Claude's custom-connector OAuth callbacks.
@@ -284,6 +292,119 @@ func NewSkylightStack(scope constructs.Construct, id string, props *awscdk.Stack
 			`"path":"$context.path","status":"$context.status","route":"$context.routeKey",` +
 			`"authzError":"$context.authorizer.error","latencyMs":"$context.responseLatency"}`),
 	})
+
+	// ---- Alerts: SNS email (address from SSM, never in the repo) ---------
+	alerts := awssns.NewTopic(stack, jsii.String("Alerts"), &awssns.TopicProps{TopicName: jsii.String("SkylightMcp-alerts")})
+	alerts.AddSubscription(awssnssubscriptions.NewEmailSubscription(
+		awsssm.StringParameter_ValueForStringParameter(stack, jsii.String(alertEmailParam), nil), nil))
+	alarmAction := awscloudwatchactions.NewSnsAction(alerts)
+
+	// ---- Canary: every 6 hours through the live alias (SPEC §8.5) -------
+	// Direct invoke (not API Gateway), so it cannot reach the MCP tools.
+	schedRole := awsiam.NewRole(stack, jsii.String("CanarySchedulerRole"), &awsiam.RoleProps{
+		AssumedBy: awsiam.NewServicePrincipal(jsii.String("scheduler.amazonaws.com"), &awsiam.ServicePrincipalOpts{
+			Conditions: &map[string]any{"StringEquals": map[string]any{"aws:SourceAccount": stack.Account()}},
+		}),
+	})
+	alias.GrantInvoke(schedRole)
+	awsscheduler.NewCfnSchedule(stack, jsii.String("CanarySchedule"), &awsscheduler.CfnScheduleProps{
+		Name:               jsii.String("SkylightMcpCanary"),
+		ScheduleExpression: jsii.String("rate(6 hours)"),
+		FlexibleTimeWindow: &awsscheduler.CfnSchedule_FlexibleTimeWindowProperty{Mode: jsii.String("OFF")},
+		Target: &awsscheduler.CfnSchedule_TargetProperty{
+			Arn:         alias.FunctionArn(),
+			RoleArn:     schedRole.RoleArn(),
+			Input:       jsii.String(canaryPayload),
+			RetryPolicy: &awsscheduler.CfnSchedule_RetryPolicyProperty{MaximumRetryAttempts: jsii.Number(0)},
+		},
+	})
+	// The canary logs one allowlisted line per run; count successes and
+	// failures from it. Pre-traffic hook runs count too.
+	metric := func(id, name, pattern string) awscloudwatch.Metric {
+		logGroup.AddMetricFilter(jsii.String(id), &awslogs.MetricFilterOptions{
+			FilterPattern:   awslogs.FilterPattern_Literal(jsii.String(pattern)),
+			MetricNamespace: jsii.String("SkylightMcp"),
+			MetricName:      jsii.String(name),
+			MetricValue:     jsii.String("1"),
+		})
+		return awscloudwatch.NewMetric(&awscloudwatch.MetricProps{
+			Namespace: jsii.String("SkylightMcp"), MetricName: jsii.String(name), Statistic: jsii.String("Sum"),
+		})
+	}
+	okMetric := metric("CanaryOkFilter", "CanaryOk", `{ ($.msg = "canary") && ($.ok IS TRUE) }`)
+	failMetric := metric("CanaryFailedFilter", "CanaryFailed", `{ ($.msg = "canary") && ($.ok IS FALSE) }`)
+	// Any failed run alerts within its 6-hour window.
+	failAlarm := awscloudwatch.NewAlarm(stack, jsii.String("CanaryFailedAlarm"), &awscloudwatch.AlarmProps{
+		AlarmName:          jsii.String("SkylightMcp-canary-failed"),
+		AlarmDescription:   jsii.String("The skylight-mcp canary failed. Check its error_class in the function log: reauthorize means run skylight-login and skylight-store-import; api_changed means Skylight changed its API."),
+		Metric:             failMetric.With(&awscloudwatch.MetricOptions{Period: awscdk.Duration_Hours(jsii.Number(6))}),
+		Threshold:          jsii.Number(1),
+		EvaluationPeriods:  jsii.Number(1),
+		ComparisonOperator: awscloudwatch.ComparisonOperator_GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
+		TreatMissingData:   awscloudwatch.TreatMissingData_NOT_BREACHING,
+	})
+	failAlarm.AddAlarmAction(alarmAction)
+	// No success in a whole day (several scheduled runs) also alerts: this
+	// catches a canary that stopped running or a function that cannot log.
+	missingAlarm := awscloudwatch.NewAlarm(stack, jsii.String("CanaryMissingAlarm"), &awscloudwatch.AlarmProps{
+		AlarmName:          jsii.String("SkylightMcp-canary-missing"),
+		AlarmDescription:   jsii.String("No successful skylight-mcp canary run in 24 hours."),
+		Metric:             okMetric.With(&awscloudwatch.MetricOptions{Period: awscdk.Duration_Days(jsii.Number(1))}),
+		Threshold:          jsii.Number(1),
+		EvaluationPeriods:  jsii.Number(1),
+		ComparisonOperator: awscloudwatch.ComparisonOperator_LESS_THAN_THRESHOLD,
+		TreatMissingData:   awscloudwatch.TreatMissingData_BREACHING,
+	})
+	missingAlarm.AddAlarmAction(alarmAction)
+
+	// ---- Deploys: CodeDeploy pre-traffic hook, all at once, auto rollback
+	// The hook (same binary, hook mode) invokes the new version and checks
+	// discovery, fail-closed auth and the canary before the alias moves.
+	hookLogs := awslogs.NewLogGroup(stack, jsii.String("HookLogs"), &awslogs.LogGroupProps{
+		LogGroupName:  jsii.String("/aws/lambda/skylight-mcp-predeploy-hook"),
+		Retention:     awslogs.RetentionDays_ONE_MONTH,
+		RemovalPolicy: awscdk.RemovalPolicy_DESTROY,
+	})
+	hookRole := awsiam.NewRole(stack, jsii.String("HookRole"), &awsiam.RoleProps{
+		AssumedBy: awsiam.NewServicePrincipal(jsii.String("lambda.amazonaws.com"), nil),
+	})
+	hookRole.AddToPolicy(awsiam.NewPolicyStatement(&awsiam.PolicyStatementProps{
+		Actions:   &[]*string{jsii.String("logs:CreateLogStream"), jsii.String("logs:PutLogEvents")},
+		Resources: &[]*string{hookLogs.LogGroupArn()},
+	}))
+	hookFn := awslambda.NewFunction(stack, jsii.String("PreTrafficHook"), &awslambda.FunctionProps{
+		FunctionName: jsii.String("skylight-mcp-predeploy-hook"),
+		Runtime:      awslambda.Runtime_PROVIDED_AL2023(),
+		Architecture: awslambda.Architecture_ARM_64(),
+		Handler:      jsii.String("bootstrap"),
+		Code:         awslambda.Code_FromAsset(jsii.String("../dist/lambda"), nil),
+		Role:         hookRole,
+		LogGroup:     hookLogs,
+		MemorySize:   jsii.Number(128),
+		Timeout:      awscdk.Duration_Minutes(jsii.Number(2)),
+		Environment: &map[string]*string{
+			"SKYLIGHT_MCP_MODE":   jsii.String("hook"),
+			"HOOK_TARGET_VERSION": fn.CurrentVersion().FunctionArn(),
+			"HOOK_HOST":           awscdk.Fn_Select(jsii.Number(1), awscdk.Fn_Split(jsii.String("//"), api.ApiEndpoint(), nil)),
+		},
+	})
+	fn.CurrentVersion().GrantInvoke(hookRole)
+	deployApp := awscodedeploy.NewLambdaApplication(stack, jsii.String("DeployApp"), &awscodedeploy.LambdaApplicationProps{
+		ApplicationName: jsii.String("SkylightMcp"),
+	})
+	deployGroup := awscodedeploy.NewLambdaDeploymentGroup(stack, jsii.String("DeployGroup"), &awscodedeploy.LambdaDeploymentGroupProps{
+		Application:         deployApp,
+		DeploymentGroupName: jsii.String("SkylightMcp"),
+		Alias:               alias,
+		DeploymentConfig:    awscodedeploy.LambdaDeploymentConfig_ALL_AT_ONCE(),
+		PreHook:             hookFn,
+		AutoRollback:        &awscodedeploy.AutoRollbackConfig{FailedDeployment: jsii.Bool(true), StoppedDeployment: jsii.Bool(true)},
+	})
+	hookFn.GrantInvoke(deployGroup.Role())
+	hookRole.AddToPolicy(awsiam.NewPolicyStatement(&awsiam.PolicyStatementProps{
+		Actions:   &[]*string{jsii.String("codedeploy:PutLifecycleEventHookExecutionStatus")},
+		Resources: &[]*string{deployGroup.DeploymentGroupArn()},
+	}))
 
 	// ---- Outputs (no secrets) --------------------------------------------
 	out := func(id string, v *string) {

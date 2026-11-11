@@ -2,6 +2,8 @@ module github.com/logich/skylight-mcp-aws/infra
 
 go 1.27.1
 
+toolchain go1.27.4
+
 require (
 	github.com/aws/aws-cdk-go/awscdk/v2 v2.276.0
 	github.com/aws/constructs-go/constructs/v10 v10.8.1

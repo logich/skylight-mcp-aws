@@ -1,0 +1,97 @@
+# Checks for every push and pull request. Also called by deploy.yml, so a
+# deploy can't skip them. No AWS access and no secrets here: safe for pull
+# requests from forks.
+name: ci
+
+on:
+  push:
+    branches-ignore: [main] # main runs this via deploy.yml, which deploys only if it passes
+  pull_request:
+  workflow_call:
+
+permissions:
+  contents: read
+
+concurrency:
+  # github.workflow is the caller's name when called from deploy.yml, so the
+  # deploy's CI never shares (or cancels) a group with a standalone CI run.
+  group: ${{ github.workflow }}-ci-${{ github.ref }}-${{ github.event_name }}
+  cancel-in-progress: true
+
+jobs:
+  go:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod # honours the toolchain directive
+          cache-dependency-path: |
+            go.sum
+            infra/go.sum
+
+      - name: repo scan (keys, account ids, real data in fixtures)
+        run: ./scripts/scan-repo.sh
+
+      - name: gofmt
+        run: test -z "$(gofmt -l cmd internal infra/main.go | tee /dev/stderr)"
+      - name: go vet
+        run: go vet ./...
+      - name: tests (race)
+        run: go test -race ./...
+      - name: short fuzz runs
+        run: |
+          go test -run x -fuzz FuzzVerify -fuzztime 15s ./internal/auth
+          go test -run x -fuzz FuzzAuthorize -fuzztime 15s ./internal/auth
+          go test -run x -fuzz FuzzParseEvents -fuzztime 15s ./internal/calendar
+          go test -run x -fuzz FuzzExtractCode -fuzztime 10s ./internal/skylight
+
+      - name: govulncheck (source)
+        run: go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./...
+      - name: build the Lambda binary
+        run: ./scripts/build.sh
+      - name: govulncheck (binary)
+        run: go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 -mode=binary dist/lambda/bootstrap
+
+  infra:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: infra/go.mod
+          cache-dependency-path: infra/go.sum
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: infra/package-lock.json
+      - name: go vet (infra)
+        working-directory: infra
+        run: go vet .
+      - name: offline synth (dummy account, no credentials, no personal data)
+        working-directory: infra
+        env:
+          CDK_DEFAULT_ACCOUNT: "000000000000"
+          JSII_SILENCE_WARNING_UNTESTED_NODE_VERSION: "1"
+        run: |
+          mkdir -p ../dist/lambda && touch ../dist/lambda/bootstrap
+          npm ci --silent
+          npx cdk synth -q
+
+  dependency-review:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
+        with:
+          fail-on-severity: moderate

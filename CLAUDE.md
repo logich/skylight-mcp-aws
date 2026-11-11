@@ -38,14 +38,15 @@ test -z "$(gofmt -l cmd internal infra/main.go)"   # never `gofmt -l .` (crawls 
 (cd infra && go vet .)                             # never `./...` in infra/ (node_modules)
 go test -run x -fuzz FuzzVerify -fuzztime 20s ./internal/auth
 ./scripts/build.sh                                 # dist/lambda/bootstrap, version = git describe
-./scripts/deploy.sh                                # deploy user only; allowed sub comes from SSM
+./scripts/deploy.sh                                # break-glass only: normal deploys are GitHub Actions (deploy.yml) on push to main, after your approval
+./scripts/scan-repo.sh                             # also runs in CI
 ./scripts/smoke-oauth.sh                           # after every deploy
 aws lambda invoke --profile skylight-mcp --region us-east-2 --function-name skylight-mcp:live \
   --cli-binary-format raw-in-base64-out --payload '{"skylight_mcp_canary":true}' /dev/stdout   # Skylight path from AWS: counts only
 CDK_DEFAULT_ACCOUNT=000000000000 npx cdk synth -q  # offline synth (in infra/), needs no personal data
 ```
 
-Admin one-offs: `scripts/bootstrap-cdk.sh` (re-run after editing `infra/bootstrap/*.json`, after the first deploy, and after anything replaces the HTTP API or user pool; validate first with `scripts/check-exec-policy.sh`), `set-allowed-sub.sh` (writes SSM `/skylight-mcp/allowed-sub`; re-run if the Cognito user is replaced), `create-cognito-user.sh`, `create-deploy-user.sh`. Skylight re-authorisation: `go run ./cmd/skylight-login -force` (browser, catch the code in DevTools), then `go run ./cmd/skylight-store-import -overwrite` (moves it into the `SkylightMcpGrant` table and deletes the local copy). Any time: `show-client-secret.sh [url|id|secret]`.
+Admin one-offs: `create-github-deploy-role.sh` (GitHub OIDC provider + role trusted only by the `production` environment), `set-alert-email.sh` (SSM `/skylight-mcp/alert-email`), `scripts/bootstrap-cdk.sh` (re-run after editing `infra/bootstrap/*.json`, after the first deploy, and after anything replaces the HTTP API or user pool; validate first with `scripts/check-exec-policy.sh`), `set-allowed-sub.sh` (writes SSM `/skylight-mcp/allowed-sub`; re-run if the Cognito user is replaced), `create-cognito-user.sh`, `create-deploy-user.sh`. Skylight re-authorisation: `go run ./cmd/skylight-login -force` (browser, catch the code in DevTools), then `go run ./cmd/skylight-store-import -overwrite` (moves it into the `SkylightMcpGrant` table and deletes the local copy). Any time: `show-client-secret.sh [url|id|secret]`.
 
 ## Gotchas already paid for
 

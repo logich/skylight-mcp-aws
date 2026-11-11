@@ -1,0 +1,25 @@
+# Weekly update PRs. CI runs on each; merging to main deploys (after the
+# owner approves the production environment).
+version: 2
+updates:
+  - package-ecosystem: gomod
+    directory: /
+    schedule: { interval: weekly }
+    groups:
+      aws-sdk:
+        patterns: ["github.com/aws/*"]
+  - package-ecosystem: gomod
+    directory: /infra
+    schedule: { interval: weekly }
+    groups:
+      cdk:
+        patterns: ["github.com/aws/aws-cdk-go/*", "github.com/aws/constructs-go/*", "github.com/aws/jsii-runtime-go"]
+  - package-ecosystem: npm
+    directory: /infra
+    schedule: { interval: weekly }
+    groups:
+      cdk-cli:
+        patterns: ["aws-cdk*"]
+  - package-ecosystem: github-actions
+    directory: /
+    schedule: { interval: weekly }

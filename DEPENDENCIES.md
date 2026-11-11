@@ -6,7 +6,7 @@ Every direct dependency of the server module, and why it is here (SPEC §9, PLAN
 |---|---|---|
 | `github.com/modelcontextprotocol/go-sdk` | The spec requires the official MCP SDK (streamable HTTP, stateless, JSON responses). | — |
 | `github.com/aws/aws-lambda-go` | Lambda runtime loop and API Gateway v2 event types. | Hand-rolling the Runtime API |
-| `github.com/aws/aws-sdk-go-v2` (+ `config`, `service/dynamodb`) | Grant store reads and conditional writes. SigV4 signing and credential handling are security-critical, so they are imported, not hand-rolled. KMS encryption is server-side, so no KMS client. | Raw HTTP + homemade SigV4 |
+| `github.com/aws/aws-sdk-go-v2` (+ `config`, `service/dynamodb`, `service/lambda`, `service/codedeploy`) | Grant store reads and conditional writes; the pre-traffic hook invokes the new version and reports to CodeDeploy. SigV4 signing and credential handling are security-critical, so they are imported, not hand-rolled. KMS encryption is server-side, so no KMS client. | Raw HTTP + homemade SigV4 |
 
 Deliberately **not** used:
 

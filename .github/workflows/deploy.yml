@@ -1,0 +1,69 @@
+# Deploy main to AWS. Runs the full CI first, then waits for the owner to
+# approve the "production" environment (required reviewer), then assumes the
+# GitHub OIDC deploy role (short-lived credentials; no AWS keys stored in
+# GitHub), deploys, and checks the result. Never runs for pull requests.
+name: deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false # never interrupt a deploy in flight
+
+jobs:
+  ci:
+    uses: ./.github/workflows/ci.yml
+
+  deploy:
+    needs: ci
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    environment: production # owner approval; the OIDC role trusts only this environment
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0 # git describe for the build version
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: |
+            go.sum
+            infra/go.sum
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: infra/package-lock.json
+      - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: us-east-2
+          mask-aws-account-id: true
+          role-duration-seconds: 3600
+      - name: mask account and stack identifiers in the public log
+        run: ./scripts/ci-mask.sh
+      - name: deploy
+        env:
+          JSII_SILENCE_WARNING_UNTESTED_NODE_VERSION: "1"
+        run: ./scripts/deploy.sh
+      - name: OAuth discovery smoke test
+        run: ./scripts/smoke-oauth.sh
+      - name: canary through the live alias (pass/fail only)
+        run: |
+          aws lambda invoke --function-name skylight-mcp:live --cli-binary-format raw-in-base64-out \
+            --payload '{"skylight_mcp_canary":true}' "$RUNNER_TEMP/canary.json" >/dev/null
+          python3 -I -c '
+          import json, sys
+          r = json.load(open(sys.argv[1]))
+          print("canary ok:", r.get("ok"), "| version:", r.get("version"), "| error class:", r.get("error_class", "-"))
+          sys.exit(0 if r.get("ok") else 1)' "$RUNNER_TEMP/canary.json"

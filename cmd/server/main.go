@@ -15,12 +15,15 @@ import (
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-lambda-go/lambda"
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/service/codedeploy"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
+	awslambda "github.com/aws/aws-sdk-go-v2/service/lambda"
 
 	"github.com/logich/skylight-mcp-aws/internal/auth"
 	"github.com/logich/skylight-mcp-aws/internal/calendar"
 	"github.com/logich/skylight-mcp-aws/internal/canary"
 	"github.com/logich/skylight-mcp-aws/internal/grant"
+	"github.com/logich/skylight-mcp-aws/internal/hook"
 	"github.com/logich/skylight-mcp-aws/internal/lambdahttp"
 	"github.com/logich/skylight-mcp-aws/internal/server"
 	"github.com/logich/skylight-mcp-aws/internal/skylight"
@@ -32,6 +35,10 @@ var version = "dev"
 
 func main() {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
+	if os.Getenv("SKYLIGHT_MCP_MODE") == "hook" {
+		runHook(logger)
+		return
+	}
 	issuer := os.Getenv("AUTH_ISSUER")
 
 	// Missing configuration is not fatal: auth fails closed, so every MCP
@@ -87,6 +94,24 @@ func main() {
 		}
 		return httpHandler(ctx, ev)
 	})
+}
+
+// runHook serves CodeDeploy pre-traffic lifecycle events only (a separate
+// function with its own narrow role; see internal/hook).
+func runHook(logger *slog.Logger) {
+	cfg, err := awsconfig.LoadDefaultConfig(context.Background())
+	if err != nil {
+		logger.Error("loading AWS config failed")
+		os.Exit(1)
+	}
+	h := hook.Hook{
+		Lambda:  awslambda.NewFromConfig(cfg),
+		CodeDep: codedeploy.NewFromConfig(cfg),
+		Target:  os.Getenv("HOOK_TARGET_VERSION"),
+		Host:    os.Getenv("HOOK_HOST"),
+		Logf:    func(f string, a ...any) { logger.Info(fmt.Sprintf(f, a...)) },
+	}
+	lambda.Start(h.Handle)
 }
 
 // skylightClient builds the grant manager and calendar client from the

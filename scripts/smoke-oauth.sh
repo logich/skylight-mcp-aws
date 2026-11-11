@@ -3,7 +3,9 @@
 # check the server refuses bad tokens. Run after every deploy and BEFORE asking
 # a human to test the connector. Needs no user credentials.
 set -uo pipefail
-export AWS_PROFILE="${ADMIN_PROFILE:-skylight-mcp}" AWS_REGION=us-east-2 AWS_PAGER=""
+# Only reads stack outputs. In CI the deploy role's credentials are used.
+if [ -z "${AWS_ACCESS_KEY_ID:-}" ]; then export AWS_PROFILE="${ADMIN_PROFILE:-skylight-mcp}"; fi
+export AWS_REGION=us-east-2 AWS_PAGER=""
 SCOPE="skylight-mcp/invoke"
 CALLBACK="https://claude.ai/api/mcp/auth_callback"
 

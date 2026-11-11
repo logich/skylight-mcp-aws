@@ -47,6 +47,12 @@ func ctxString(scope constructs.Construct, key string) string {
 func NewSkylightStack(scope constructs.Construct, id string, props *awscdk.StackProps) awscdk.Stack {
 	stack := awscdk.NewStack(scope, &id, props)
 
+	// Every taggable resource carries project=skylight-mcp. The CloudFormation
+	// execution policy only lets deploys touch Cognito user pools and KMS keys
+	// that carry this tag (or create them with it), so the tag is an access
+	// boundary, not decoration: never change or remove it.
+	awscdk.Tags_Of(stack).Add(jsii.String("project"), jsii.String("skylight-mcp"), nil)
+
 	// Every IAM role in this stack carries the boundary created by
 	// scripts/bootstrap-cdk.sh; the CloudFormation execution policy refuses to
 	// create or grant permissions to a role without it.

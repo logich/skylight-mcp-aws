@@ -141,6 +141,11 @@ Other notes from the iOS repo: `skylight_api_resources.md` calls the API "GraphQ
 
 ## 6. Unknowns to resolve with live calls (outside CI, once)
 
+Confirmed live on 2026-11-11 (first sign-in via `skylight-login`, one `GET /api/frames`):
+- The code flow works with HA's fields, but `/welcome` rewrites the address bar immediately; the code must be caught in the browser's Network tab ("Preserve log").
+- Code exchange returns `access_token` and `refresh_token` (43 characters each) and an `expires_in` of 24 hours.
+- `GET /api/frames` with Bearer + `Skylight-Api-Version: 2026-05-01` → 200, JSON:API (`data`, `included`, `meta`), one frame. The response echoes `Skylight-Api-Version: 2026-05-01`, so a version change is detectable. Frame attributes include `household_name`, `name` **and `timezone`**, so the frame's own timezone is available for event windows.
+
 1. `GET /categories?include_profiles=true` real shape (needed for `list_family_members`: id, name, colour).
 2. Whether any `GET /calendar_events/{id}` exists.
 3. Access-token lifetime, and whether refresh also returns a new `refresh_token` every time.

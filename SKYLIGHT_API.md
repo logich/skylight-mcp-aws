@@ -7,7 +7,7 @@ Sources read (cloned, not modified):
 | **HA** | `logich/skylight_calendar` (`custom_components/skylight/`: `api.py`, `config_flow.py`, `const.py`, `people.py`, `calendar.py`) | 2026-10-26 | **Primary** for auth and event/tag shape. Written against the live API with `Skylight-Api-Version: 2026-05-01`. |
 | **iOS** | `logich/Skylight-swift` (`SkylightEndpoint.swift`, `CalendarEvent.swift`, `AuthenticationManager.swift`, docs) | 2026-02-03 | Secondary. Predates Skylight's OAuth move. Endpoint paths and event models are still useful. Its auth is out of date. |
 
-**Nothing here has been verified against the live API by me.** Skylight has no public API. Everything below is reverse-engineered by those two repos. The first implementation task is to confirm each claim marked ⚠ with one real call (outside CI), then freeze scrubbed fixtures from the responses.
+Skylight has no public API; §1–§5 started as notes from those two reverse-engineered repos. **Since 2026-11-11 the parts this server uses are verified against the live API** (laptop probes and calls from Lambda; results in §6, code in `internal/skylight`, `internal/calendar`, `internal/grant`). Where a statement below was corrected by a live call, it says so. Still unverified: anything about writes (§4.3, v2), refresh-token idle expiry, and 429 behaviour.
 
 Decision: follow HA for auth (OAuth authorization code + PKCE, refresh token). Do not use the iOS `/api/sessions` password flow.
 
@@ -16,10 +16,10 @@ Decision: follow HA for auth (OAuth authorization code + PKCE, refresh token). D
 ## 1. Base
 
 - Base URL: `https://app.ourskylight.com`
-- Request headers (HA): `Authorization: Bearer <access_token>`, `Accept: application/json`, `Skylight-Api-Version: 2026-05-01`, and a browser-style `User-Agent` (HA sends a Chrome UA, ⚠ unclear whether it is required).
+- Request headers: `Authorization: Bearer <access_token>`, `Accept: application/json`, `Skylight-Api-Version: 2026-05-01`. HA also sends a browser `User-Agent`; **verified not required** (the server sends `skylight-mcp`). The version header **is** required: without it the server answers as `2026-01-01`.
 - Format: JSON:API-flavoured responses (`data[]`, `included[]`, `relationships`). **Request bodies for calendar events are plain JSON, not JSON:API envelopes** (HA, "confirmed flat"). Other resources (lists, task box) are unverified.
-- Timeouts HA uses: 20 s for API calls, 15 s for token calls.
-- Rate limits: undocumented in both repos. Neither implements 429 handling beyond classification. We will implement backoff (see §7).
+- Timeouts: 20 s for API calls and 15 s for token calls (as HA); the server's token refresh is further capped at 4 s inside the lease.
+- Rate limits: undocumented, and none seen live (no 429, no `Retry-After`). The client honours `Retry-After` (capped at 10 s) or uses jittered exponential backoff, at most 3 attempts within the request deadline.
 
 ## 2. Authentication
 
@@ -43,17 +43,17 @@ Code exchange (`POST` token URL, form-encoded):
 Refresh (`POST` token URL, form-encoded):
 `grant_type=refresh_token`, `refresh_token`, `client_id`, `scope=everything`, `source=web`, plus device fields.
 
-Device fields (sent on both): `skylight_api_client_device_fingerprint` (random hex, generated once per install), `_platform=web`, `_name`, `_os_version`, `_app_version=unknown`, `_hardware=3`.
+Device fields (sent on both, full names): `skylight_api_client_device_fingerprint` (32 hex characters, generated once per grant), `skylight_api_client_device_platform=web`, `skylight_api_client_device_name` (HA: `home-assistant`; this server: `skylight-mcp`), `skylight_api_client_device_os_version` (this server: `unknown`), `skylight_api_client_device_app_version=unknown`, `skylight_api_client_device_hardware=3`.
 
-Response: `access_token`, `refresh_token`. Expiry/`expires_in` is not read by HA; it refreshes **reactively on 401**, once, then retries the request.
+Response (verified): `access_token`, `refresh_token`, `expires_in` (24 h), `created_at`, `scope`, `token_type`. HA ignores `expires_in` and refreshes reactively on 401. This server does both: it refreshes 5 minutes before the stored expiry, and once on a 401.
 
 Key properties:
 
-- **Refresh tokens rotate on every use.** HA serialises refreshes with a lock because a second concurrent refresh with the old token fails. This is the main design hazard for a Lambda (see §7).
+- **Refresh tokens rotate on every use** (verified). HA serialises refreshes with a lock, assuming a second concurrent refresh with the old token fails. **Live probes say otherwise:** simultaneous refreshes both succeed, and a spent token stays valid until its successor's access token is used (Doorkeeper semantics; see §6, rotation hazards). The lease still matters (§7).
 - A refresh token may be bound to the `device_fingerprint` it was issued with, so the fingerprint must be stored with it and sent back unchanged.
 - Token-endpoint failures: HTTP 400/401/403 means the credential is bad (treat as "re-authorise needed"). Anything else (5xx, 429) is the service being unavailable and must **not** be treated as signed-out.
 - Sign-out everywhere, password change or server-side revoke invalidates the grant, and then a human must redo the browser step.
-- Bootstrap: a one-off local tool does the browser step and writes `{refresh_token, device_fingerprint}` to Secrets Manager. The server never sees the password.
+- Bootstrap (as built): `cmd/skylight-login` does the browser step and saves the grant locally (mode 0600); `cmd/skylight-store-import` moves it, with the frame id, into the DynamoDB table `SkylightMcpGrant` and deletes the local copy. The server never sees the password. The `/welcome` page rewrites the address bar at once, so the code is caught in the browser's Network tab.
 
 ### 2.2 iOS flow (do not use) — disagreement #1
 
@@ -68,19 +68,21 @@ Key properties:
 
 | Purpose | Request | Notes |
 |---|---|---|
-| List frames | `GET /api/frames` | `data[].id`, `attributes.household_name` (display name) and `attributes.name` (generated slug, e.g. "byrd-malone-7772"). Single-frame accounts: auto-select. Plan: configure frame id once in the secret. |
-| Family members / categories | `GET /api/frames/{fid}/categories?include_profiles=true` | **Family members are categories with `linked_to_profile: true`.** ⚠ Exact response shape: HA uses it only for sensors; confirm with a live call. |
-| Events | `GET /api/frames/{fid}/calendar_events?date_min=YYYY-MM-DD&date_max=YYYY-MM-DD&timezone=<IANA>&include=categories` | **`include=categories` is mandatory**, otherwise tags are absent. Window is date-granular, not datetime. iOS also asks for `calendar_account,event_notification_setting`; not needed. |
+| List frames | `GET /api/frames` | Verified. `data[].id`, `attributes.household_name`, `attributes.name` (slug) and `attributes.timezone`. The frame id is stored in the grant item at import; the client reads the frame's timezone from this list (a single-frame `GET /api/frames/{fid}` is not used, as it is unverified). |
+| Family members / categories | `GET /api/frames/{fid}/categories?include_profiles=true` | Verified; shape in §6 (#1). **Family members are categories with `linked_to_profile: true`.** |
+| Events | `GET /api/frames/{fid}/calendar_events?date_min=YYYY-MM-DD&date_max=YYYY-MM-DD&timezone=<IANA>&include=categories` | Verified. **`include=categories` is mandatory** (without it the relationship key is `category` and the parser rejects the document). Window is date-granular and **`date_max` is exclusive**. Recurring events come back one row per occurrence. No pagination seen. |
 | Create event (v2) | `POST /api/frames/{fid}/calendar_events` | Flat JSON, see §4. |
 | Update event (v2) | `PUT /api/frames/{fid}/calendar_events/{id}` | Flat, partial: only keys present change. |
 | Delete event (v2) | `DELETE /api/frames/{fid}/calendar_events/{id}` | Empty body. |
 | Source calendars | `GET /api/frames/{fid}/source_calendars` | Not needed for v1. |
 
-There is **no single-event GET** in either repo. `get_event` will be implemented as: list events and filter by id. ⚠ A narrow window around an unknown id is impossible, so either accept `start`/`end` hints, cache, or probe `GET .../calendar_events/{id}` live to see if it exists.
+There is **no single-event GET** (verified: 404 for every id form). `get_event` lists a window and filters by id. Occurrence ids (`<event>-<unix start>`) give the window. Other ids use the optional `around` hint, else -30/+180 days.
 
 ## 4. Data models
 
-### 4.1 Event (JSON:API resource, `type` is not asserted by HA)
+### 4.1 Event (JSON:API resource)
+
+As first noted from the repos; the live shape is below this block.
 
 ```
 data[]: {
@@ -111,6 +113,8 @@ included[]: {
 
 (Wire keys are snake_case; iOS decodes with a camelCase strategy.)
 
+**Live shape (verified, what the parser relies on):** `type` is always `calendar_event` and the parser asserts it. `starts_at`/`ends_at` are RFC 3339 with milliseconds and an offset (all-day: local midnight to midnight, end exclusive). `all_day` is a required boolean. `summary`, `description`, `location` and `timezone` are optional strings. `recurring` is a boolean. `rrule` is null or a list of `RRULE:` strings. Further attributes exist and are ignored: `calendar_id`, `master_event_id`, `uid`, `source`, `editable`, `status`, `kind`, `lat`/`lng`, `owner_email`, `invited_emails` (personal data: never logged). Included categories carry `label`, `color`, `linked_to_profile` and `selected_for_chore_chart`; there is no `profile_pic_url`.
+
 ### 4.2 The event → family-member tag
 
 1. Event `relationships.categories.data[]` lists category ids.
@@ -118,7 +122,7 @@ included[]: {
 3. **Family member = category with `attributes.linked_to_profile == true` and a non-empty `label`.** Other categories are calendar buckets (e.g. "US Holidays") and must be dropped.
 4. Name = `attributes.label` (trimmed). Order = Skylight's order. De-duplicate by name.
 
-Disagreement #2: **iOS treats every category as an attendee** (comment: "include all categories as attendees") and never checks `linked_to_profile`. HA filters on it. Follow HA, otherwise holiday calendars appear as "people". The MCP will expose the non-member categories separately, or drop them.
+Disagreement #2: **iOS treats every category as an attendee** (comment: "include all categories as attendees") and never checks `linked_to_profile`. HA filters on it. Followed HA: the server **drops** non-member categories (for example holiday calendars). Observed live: Skylight also marks some non-person categories as linked to a profile (for example "Family" and a shared building calendar), so they appear as members. That is the household's own setup, not a parsing error.
 
 ### 4.3 Create / update body (HA, flat JSON)
 
@@ -139,7 +143,7 @@ Disagreement #3: iOS names the same fields `categoryIds`, `startsAt`, etc. under
 
 Other notes from the iOS repo: `skylight_api_resources.md` calls the API "GraphQL" in one place and lists paths like `/calendar` and `/family`. Both are wrong against the actual code. Disregard.
 
-## 6. Unknowns to resolve with live calls (outside CI, once)
+## 6. Live verification (2026-11-11; outside CI)
 
 Confirmed live on 2026-11-11 (first sign-in via `skylight-login`, one `GET /api/frames`):
 - The code flow works with HA's fields, but `/welcome` rewrites the address bar immediately; the code must be caught in the browser's Network tab ("Preserve log").
@@ -175,20 +179,15 @@ Design consequences (PLAN §4):
 
 **From AWS Lambda** (us-east-2, canary invoke, 2026-11-11): no datacenter-IP blocking. API reads (frames list, categories, 7-day events) and a token refresh both succeed from Lambda with a plain `User-Agent`; the lease/commit cycle ran as designed (generation 0 → 1, lease released, new 24 h token used only after the commit).
 
-Still open (need time): refresh-token idle expiry, 429 behaviour.
+Still open (need time): refresh-token idle expiry, 429 behaviour, and everything about writes (#8).
 
-1. `GET /categories?include_profiles=true` real shape (needed for `list_family_members`: id, name, colour).
-2. Whether any `GET /calendar_events/{id}` exists.
-3. Access-token lifetime, and whether refresh also returns a new `refresh_token` every time.
-4. Whether the `User-Agent`/`Skylight-Api-Version` headers are required.
-5. 429 behaviour and any `Retry-After`.
-6. Recurring events: does one row come back per occurrence in the window or one master with `rrule`?
-7. All-day event date format (bare date vs midnight timestamps) and the timezone semantics of `date_max` (inclusive?).
-8. Required fields for create, and whether `category_ids` accepts only family-member categories.
+The original questions, answered by the table above in the same order: (1) categories shape, (2) single-event GET, (3) token lifetime and rotation, (4) required headers, (5) 429 and `Retry-After`, (6) recurring events, (7) all-day format and `date_max`, (8) create fields and `category_ids`.
 
 ## 7. Implications for the server design
 
-- **Refresh-token rotation + Lambda concurrency.** Two concurrent invocations may both refresh with the same token; one fails and may invalidate the chain. Mitigation to decide in the plan: reserved concurrency of 1 plus read-modify-write of the secret (Secrets Manager `PutSecretValue`), and on a 400 from refresh re-read the secret once before failing.
-- **A failed refresh is not recoverable by the server**; it needs a human re-authorisation. The error must say so plainly, and the daily canary should also catch it.
-- Rate limiting: honour `Retry-After` if present, otherwise capped exponential backoff with jitter, a retry budget below the Lambda timeout.
-- Shape-change detection: parsers must check the JSON:API structure and return "upstream API changed" on missing `data`, wrong types or an unexpected `Skylight-Api-Version` echo, rather than dropping events silently. Note HA currently *skips* events missing `starts_at`/`ends_at`; we must not.
+As built (`internal/grant`, `internal/calendar`):
+
+- **Refresh-token rotation + Lambda concurrency.** The grant is one DynamoDB item (KMS-encrypted, strongly consistent reads, conditional writes). A refresher takes a 10-second lease, re-reads, refreshes with a 4-second deadline, and **commits the new tokens before the new access token is used**. On `invalid_grant` it re-reads before giving up. No reserved concurrency (the account limit is 10) and no Secrets Manager.
+- **A failed refresh is not recoverable by the server**; it needs a human re-authorisation (`skylight-login`, then `skylight-store-import -overwrite`). Tools say so plainly, and the canary reports `error_class: reauthorize`.
+- Rate limiting: `Retry-After` honoured (capped at 10 s), else capped exponential backoff with jitter, at most 3 attempts and never past the request deadline.
+- Shape-change detection: missing `data`, wrong types, wrong resource types, events without `relationships.categories`, categories missing from `included`, missing `starts_at`/`ends_at`, an end before the start, or a different `Skylight-Api-Version` echo all return "upstream API changed". No event is silently skipped.

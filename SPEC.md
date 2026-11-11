@@ -27,6 +27,8 @@ Read these before writing any code:
 
 Skylight has no public API. Both implementations use its private, reverse-engineered API.
 
+(Revised 2026-11-11: the HA integration became the primary reference. The iOS app's auth predates Skylight's move to OAuth, and its API guide describes paths its own code never calls. See `SKYLIGHT_API.md`, which records what was then verified against the live API.)
+
 **First deliverable:** `SKYLIGHT_API.md`, covering endpoints, auth and token refresh flow, and data models (events, family members/profiles, and the event-to-member tag). Note any place where the iOS and HA implementations disagree.
 
 ## 3. Language and dependencies
@@ -44,7 +46,9 @@ Skylight has no public API. Both implementations use its private, reverse-engine
 |---|---|---|
 | `list_family_members` | none | id, name, colour |
 | `list_events` | `start`, `end` (RFC 3339), optional `member` | events with title, start, end, all-day flag, location, notes, and member tags as **names** (not just ids) |
-| `get_event` | `event_id` | one event, same shape |
+| `get_event` | `event_id`, optional `around` (RFC 3339) | one event, same shape |
+
+(Revised 2026-11-11: Skylight has no single-event endpoint, so `get_event` searches a window. Recurring-occurrence ids carry their start time; for other ids the optional `around` hint narrows the search, else a -30/+180-day window is used. `list_events` accepts at most 93 days per call. Family members are Skylight categories marked as linked to a profile, which can include non-person entries the household created, such as "Family".)
 
 ### v2 (behind a config flag, off by default)
 
@@ -87,16 +91,16 @@ All tests run in CI with no live Skylight calls:
 
 Separately, outside CI:
 
-5. **Daily live canary:** a scheduled check inside AWS against the real Skylight API that emails me (via SNS) if it starts failing. This catches Skylight changing its API. It uses the server's own token store and cannot reach the MCP tools.
+5. **Daily live canary:** a scheduled check inside AWS against the real Skylight API that emails me (via SNS) if it starts failing. This catches Skylight changing its API. It uses the server's own token store and cannot reach the MCP tools. (As built: every 6 hours, alerting on any failed run and on no success in 24 hours.)
 
 ## 9. Updates and deployment
 
-- The code lives in a **public** GitHub repo, `https://github.com/logich/skylight-mcp-aws`, so GitHub's free security features apply: secret scanning with push protection, CodeQL code scanning, dependency review on PRs, and Dependabot alerts and security updates. Enable and keep them on. Because the repo is public, nothing sensitive may be committed: no credentials or tokens, no AWS account ID, and only scrubbed fixtures (scan them for emails, names, ids and tokens before committing).
-- The deploy role trusts GitHub OIDC only for this repo's `main` branch (and the canary role only for the scheduled workflow), so a fork or pull request can never deploy or invoke anything. Deploy jobs run in a protected GitHub environment.
+- The code lives in a **public** GitHub repo, `https://github.com/logich/skylight-mcp-aws`, so GitHub's free security features apply: secret scanning with push protection, CodeQL code scanning, dependency review on PRs, and Dependabot alerts and security updates. Enable and keep them on. (**Not yet met**, 2026-11-11: Dependabot alerts and security updates are still disabled in the repository settings.) Because the repo is public, nothing sensitive may be committed: no credentials or tokens, no AWS account ID, and only scrubbed fixtures (scan them for emails, names, ids and tokens before committing).
+- The deploy role trusts GitHub OIDC only for this repo's protected `production` environment (deployable only from `main`, and only after my approval), so a fork or pull request can never deploy or invoke anything. (Revised 2026-11-11: the canary runs inside AWS on EventBridge Scheduler, so there is no GitHub canary role.)
 - Dependabot or Renovate opens PRs for Go and module updates.
 - CI runs `go vet`, `govulncheck` and all tests on every PR.
-- Merging to main builds and deploys automatically.
-- Publish a new function version, run smoke tests against it in a pre-traffic hook, then shift all traffic at once, with automatic rollback if a hook fails or the error alarm fires. (Revised 2026-11-11: gradual shifting has no signal at single-user traffic.)
+- Merging to main builds and deploys automatically, after I approve the deployment in GitHub.
+- Publish a new function version, run smoke tests against it in a pre-traffic hook, then shift all traffic at once, with automatic rollback if a hook fails or the error alarm fires. (Revised 2026-11-11: gradual shifting has no signal at single-user traffic.) **Not yet met:** rollback on an error alarm; today only a failed pre-traffic hook rolls back.
 - `cdk synth` in CI needs no real account, credentials or personal values, so pull-request logs leak nothing.
 - Enable Amazon Inspector scanning for the function.
 

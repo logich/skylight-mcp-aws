@@ -1,5 +1,7 @@
 # Retrospective: planning and Step 0 (2026-11-11)
 
+> Historical record: it describes the project as it stood at each point in the session, including plans later changed. For the current state, read PLAN.md (status and §6) and SKYLIGHT_API.md.
+
 Scope: from reading SPEC.md to a working `hello` call through the claude.ai connector (commit `19400de`). Part 1 is what happened in the session. Part 2 is an adversarial review of the plan's next steps, done by three independent reviewers who were asked to break the plan's assumptions with evidence, then checked by me.
 
 ## Outcome

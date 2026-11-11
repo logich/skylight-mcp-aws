@@ -1,0 +1,74 @@
+{
+  "_meta": {
+    "io.modelcontextprotocol/serverInfo": {
+      "name": "skylight-mcp",
+      "version": "test-version"
+    }
+  },
+  "content": [
+    {
+      "type": "text",
+      "text": "{\"members\":[{\"color\":\"#A479E3\",\"id\":\"9000011\",\"name\":\"Member 1\"},{\"color\":\"#CE812D\",\"id\":\"9000014\",\"name\":\"Member 2\"},{\"color\":\"#1DA665\",\"id\":\"9000015\",\"name\":\"Member 3\"},{\"color\":\"#8DDDE5\",\"id\":\"9000019\",\"name\":\"Member 7\"},{\"color\":\"#E6C800\",\"id\":\"9000020\",\"name\":\"Member 8\"},{\"color\":\"#4A86E7\",\"id\":\"9000023\",\"name\":\"Member 9\"},{\"color\":\"#F8CC50\",\"id\":\"9000027\",\"name\":\"Member 11\"},{\"color\":\"#F791B3\",\"id\":\"9000028\",\"name\":\"Member 12\"},{\"color\":\"#F63922\",\"id\":\"9000029\",\"name\":\"Member 13\"},{\"color\":\"#A379E2\",\"id\":\"9000032\",\"name\":\"Member 14\"},{\"color\":\"#A8D4D3\",\"id\":\"9000033\",\"name\":\"Member 15\"}]}"
+    }
+  ],
+  "structuredContent": {
+    "members": [
+      {
+        "color": "#A479E3",
+        "id": "9000011",
+        "name": "Member 1"
+      },
+      {
+        "color": "#CE812D",
+        "id": "9000014",
+        "name": "Member 2"
+      },
+      {
+        "color": "#1DA665",
+        "id": "9000015",
+        "name": "Member 3"
+      },
+      {
+        "color": "#8DDDE5",
+        "id": "9000019",
+        "name": "Member 7"
+      },
+      {
+        "color": "#E6C800",
+        "id": "9000020",
+        "name": "Member 8"
+      },
+      {
+        "color": "#4A86E7",
+        "id": "9000023",
+        "name": "Member 9"
+      },
+      {
+        "color": "#F8CC50",
+        "id": "9000027",
+        "name": "Member 11"
+      },
+      {
+        "color": "#F791B3",
+        "id": "9000028",
+        "name": "Member 12"
+      },
+      {
+        "color": "#F63922",
+        "id": "9000029",
+        "name": "Member 13"
+      },
+      {
+        "color": "#A379E2",
+        "id": "9000032",
+        "name": "Member 14"
+      },
+      {
+        "color": "#A8D4D3",
+        "id": "9000033",
+        "name": "Member 15"
+      }
+    ]
+  },
+  "resultType": "complete"
+}

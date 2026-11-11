@@ -1,0 +1,32 @@
+{
+  "_meta": {
+    "io.modelcontextprotocol/serverInfo": {
+      "name": "skylight-mcp",
+      "version": "test-version"
+    }
+  },
+  "content": [
+    {
+      "type": "text",
+      "text": "{\"events\":[{\"all_day\":false,\"end\":\"2033-04-19T11:00:00-05:00\",\"id\":\"90000000054\",\"location\":\"location 5\",\"members\":[\"Member 1\"],\"notes\":\"description 3\",\"start\":\"2033-04-19T10:00:00-05:00\",\"title\":\"Event 15\"}],\"timezone\":\"America/Chicago\"}"
+    }
+  ],
+  "structuredContent": {
+    "events": [
+      {
+        "all_day": false,
+        "end": "2033-04-19T11:00:00-05:00",
+        "id": "90000000054",
+        "location": "location 5",
+        "members": [
+          "Member 1"
+        ],
+        "notes": "description 3",
+        "start": "2033-04-19T10:00:00-05:00",
+        "title": "Event 15"
+      }
+    ],
+    "timezone": "America/Chicago"
+  },
+  "resultType": "complete"
+}

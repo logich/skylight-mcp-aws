@@ -12,6 +12,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/logich/skylight-mcp-aws/internal/auth"
+	"github.com/logich/skylight-mcp-aws/internal/tools"
 )
 
 // Options configures the handler.
@@ -28,6 +29,9 @@ type Options struct {
 	Version      string
 	Logger       *slog.Logger
 	Now          func() time.Time // defaults to time.Now
+	// Calendar backs the Skylight tools. Nil: the tools are listed but report
+	// that the Skylight connection is not configured.
+	Calendar tools.Calendar
 }
 
 type helloOut struct {
@@ -45,7 +49,7 @@ func New(o Options) http.Handler {
 	}
 
 	mcpHandler := mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server {
-		return newMCPServer(o.Version)
+		return newMCPServer(o)
 	}, &mcp.StreamableHTTPOptions{Stateless: true, JSONResponse: true})
 
 	mux := http.NewServeMux()
@@ -63,7 +67,8 @@ func New(o Options) http.Handler {
 	return logRequests(o.Logger, mux)
 }
 
-func newMCPServer(version string) *mcp.Server {
+func newMCPServer(o Options) *mcp.Server {
+	version := o.Version
 	s := mcp.NewServer(&mcp.Implementation{Name: "skylight-mcp", Version: version}, nil)
 	mcp.AddTool(s, &mcp.Tool{
 		Name:        "hello",
@@ -71,6 +76,7 @@ func newMCPServer(version string) *mcp.Server {
 	}, func(context.Context, *mcp.CallToolRequest, struct{}) (*mcp.CallToolResult, helloOut, error) {
 		return nil, helloOut{Message: "hello from skylight-mcp", Version: version}, nil
 	})
+	tools.Register(s, o.Calendar, o.Logger)
 	return s
 }
 

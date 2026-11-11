@@ -1,0 +1,259 @@
+{
+  "_meta": {
+    "io.modelcontextprotocol/serverInfo": {
+      "name": "skylight-mcp",
+      "version": "test-version"
+    }
+  },
+  "content": [
+    {
+      "type": "text",
+      "text": "{\"events\":[{\"all_day\":false,\"end\":\"2033-04-13T18:30:00-05:00\",\"id\":\"90000000037-1997038800\",\"members\":[\"Member 11\"],\"recurring\":true,\"start\":\"2033-04-13T16:00:00-05:00\",\"title\":\"Event 1\"},{\"all_day\":false,\"end\":\"2033-04-13T17:10:00-05:00\",\"id\":\"90000000039-1997039400\",\"members\":[\"Member 12\"],\"recurring\":true,\"start\":\"2033-04-13T16:10:00-05:00\",\"title\":\"Event 2\"},{\"all_day\":false,\"end\":\"2033-04-14T15:15:00-05:00\",\"id\":\"90000000040-1997119800\",\"members\":[\"Member 12\"],\"recurring\":true,\"start\":\"2033-04-14T14:30:00-05:00\",\"title\":\"Event 3\"},{\"all_day\":false,\"end\":\"2033-04-14T15:45:00-05:00\",\"id\":\"90000000041-1997121600\",\"members\":[\"Member 11\"],\"recurring\":true,\"start\":\"2033-04-14T15:00:00-05:00\",\"title\":\"Event 4\"},{\"all_day\":false,\"end\":\"2033-04-14T15:45:00-05:00\",\"id\":\"90000000042-1997121600\",\"location\":\"location 1\",\"members\":[\"Member 11\"],\"notes\":\"description 1\",\"recurring\":true,\"start\":\"2033-04-14T15:00:00-05:00\",\"title\":\"Event 5\"},{\"all_day\":false,\"end\":\"2033-04-15T07:30:00-05:00\",\"id\":\"90000000044-1997179200\",\"members\":[\"Member 12\"],\"recurring\":true,\"start\":\"2033-04-15T07:00:00-05:00\",\"title\":\"Event 2\"},{\"all_day\":false,\"end\":\"2033-04-15T10:00:00-05:00\",\"id\":\"90000000045\",\"members\":[\"Member 11\"],\"start\":\"2033-04-15T09:00:00-05:00\",\"title\":\"Event 6\"},{\"all_day\":false,\"end\":\"2033-04-15T16:00:00-05:00\",\"id\":\"9000000046-1997209800\",\"location\":\"location 2\",\"members\":[\"Member 12\"],\"recurring\":true,\"start\":\"2033-04-15T15:30:00-05:00\",\"title\":\"Event 7\"},{\"all_day\":false,\"end\":\"2033-04-16T12:45:00-05:00\",\"id\":\"90000000047-1997282700\",\"location\":\"location 3\",\"members\":[\"Member 11\"],\"notes\":\"description 2\",\"recurring\":true,\"start\":\"2033-04-16T11:45:00-05:00\",\"title\":\"Event 8\"},{\"all_day\":false,\"end\":\"2033-04-16T16:00:00-05:00\",\"id\":\"90000000048-1997287200\",\"members\":[\"Member 12\",\"Member 11\"],\"recurring\":true,\"start\":\"2033-04-16T13:00:00-05:00\",\"title\":\"Event 9\"},{\"all_day\":false,\"end\":\"2033-04-17T17:00:00-05:00\",\"id\":\"90000000049\",\"members\":[\"Member 11\"],\"start\":\"2033-04-17T14:00:00-05:00\",\"title\":\"Event 10\"},{\"all_day\":false,\"end\":\"2033-04-18T11:00:00-05:00\",\"id\":\"90000000050-1997449200\",\"members\":[\"Member 14\"],\"recurring\":true,\"start\":\"2033-04-18T10:00:00-05:00\",\"title\":\"Event 11\"},{\"all_day\":false,\"end\":\"2033-04-18T15:30:00-05:00\",\"id\":\"90000000051-1997465400\",\"members\":[\"Member 12\"],\"recurring\":true,\"start\":\"2033-04-18T14:30:00-05:00\",\"title\":\"Event 12\"},{\"all_day\":false,\"end\":\"2033-04-18T17:30:00-05:00\",\"id\":\"9000000052-1997474400\",\"location\":\"location 4\",\"members\":[\"Member 11\"],\"recurring\":true,\"start\":\"2033-04-18T17:00:00-05:00\",\"title\":\"Event 13\"},{\"all_day\":true,\"end\":\"2033-04-20T00:00:00-05:00\",\"id\":\"9000000053-1997499600\",\"members\":[\"Member 14\"],\"recurring\":true,\"start\":\"2033-04-19T00:00:00-05:00\",\"title\":\"Event 14\"},{\"all_day\":false,\"end\":\"2033-04-19T11:00:00-05:00\",\"id\":\"90000000054\",\"location\":\"location 5\",\"members\":[\"Member 1\"],\"notes\":\"description 3\",\"start\":\"2033-04-19T10:00:00-05:00\",\"title\":\"Event 15\"},{\"all_day\":false,\"end\":\"2033-04-19T18:00:00-05:00\",\"id\":\"90000000055-1997560500\",\"members\":[\"Member 12\"],\"recurring\":true,\"start\":\"2033-04-19T16:55:00-05:00\",\"title\":\"Event 16\"},{\"all_day\":false,\"end\":\"2033-04-19T18:45:00-05:00\",\"id\":\"90000000056-1997562600\",\"location\":\"location 3\",\"members\":[\"Member 11\"],\"notes\":\"description 2\",\"recurring\":true,\"start\":\"2033-04-19T17:30:00-05:00\",\"title\":\"Event 17\"},{\"all_day\":false,\"end\":\"2033-04-19T20:30:00-05:00\",\"id\":\"90000000057\",\"members\":[\"Member 11\"],\"start\":\"2033-04-19T18:30:00-05:00\",\"title\":\"Event 18\"},{\"all_day\":false,\"end\":\"2033-04-19T20:00:00-05:00\",\"id\":\"9000000061-1997568000\",\"location\":\"location 6\",\"members\":[\"Member 8\"],\"recurring\":true,\"start\":\"2033-04-19T19:00:00-05:00\",\"title\":\"Event 20\"},{\"all_day\":false,\"end\":\"2033-04-19T23:00:00-05:00\",\"id\":\"90000000062-1997568000\",\"members\":[\"Member 13\"],\"recurring\":true,\"start\":\"2033-04-19T19:00:00-05:00\",\"title\":\"Event 21\"}],\"timezone\":\"America/Chicago\"}"
+    }
+  ],
+  "structuredContent": {
+    "events": [
+      {
+        "all_day": false,
+        "end": "2033-04-13T18:30:00-05:00",
+        "id": "90000000037-1997038800",
+        "members": [
+          "Member 11"
+        ],
+        "recurring": true,
+        "start": "2033-04-13T16:00:00-05:00",
+        "title": "Event 1"
+      },
+      {
+        "all_day": false,
+        "end": "2033-04-13T17:10:00-05:00",
+        "id": "90000000039-1997039400",
+        "members": [
+          "Member 12"
+        ],
+        "recurring": true,
+        "start": "2033-04-13T16:10:00-05:00",
+        "title": "Event 2"
+      },
+      {
+        "all_day": false,
+        "end": "2033-04-14T15:15:00-05:00",
+        "id": "90000000040-1997119800",
+        "members": [
+          "Member 12"
+        ],
+        "recurring": true,
+        "start": "2033-04-14T14:30:00-05:00",
+        "title": "Event 3"
+      },
+      {
+        "all_day": false,
+        "end": "2033-04-14T15:45:00-05:00",
+        "id": "90000000041-1997121600",
+        "members": [
+          "Member 11"
+        ],
+        "recurring": true,
+        "start": "2033-04-14T15:00:00-05:00",
+        "title": "Event 4"
+      },
+      {
+        "all_day": false,
+        "end": "2033-04-14T15:45:00-05:00",
+        "id": "90000000042-1997121600",
+        "location": "location 1",
+        "members": [
+          "Member 11"
+        ],
+        "notes": "description 1",
+        "recurring": true,
+        "start": "2033-04-14T15:00:00-05:00",
+        "title": "Event 5"
+      },
+      {
+        "all_day": false,
+        "end": "2033-04-15T07:30:00-05:00",
+        "id": "90000000044-1997179200",
+        "members": [
+          "Member 12"
+        ],
+        "recurring": true,
+        "start": "2033-04-15T07:00:00-05:00",
+        "title": "Event 2"
+      },
+      {
+        "all_day": false,
+        "end": "2033-04-15T10:00:00-05:00",
+        "id": "90000000045",
+        "members": [
+          "Member 11"
+        ],
+        "start": "2033-04-15T09:00:00-05:00",
+        "title": "Event 6"
+      },
+      {
+        "all_day": false,
+        "end": "2033-04-15T16:00:00-05:00",
+        "id": "9000000046-1997209800",
+        "location": "location 2",
+        "members": [
+          "Member 12"
+        ],
+        "recurring": true,
+        "start": "2033-04-15T15:30:00-05:00",
+        "title": "Event 7"
+      },
+      {
+        "all_day": false,
+        "end": "2033-04-16T12:45:00-05:00",
+        "id": "90000000047-1997282700",
+        "location": "location 3",
+        "members": [
+          "Member 11"
+        ],
+        "notes": "description 2",
+        "recurring": true,
+        "start": "2033-04-16T11:45:00-05:00",
+        "title": "Event 8"
+      },
+      {
+        "all_day": false,
+        "end": "2033-04-16T16:00:00-05:00",
+        "id": "90000000048-1997287200",
+        "members": [
+          "Member 12",
+          "Member 11"
+        ],
+        "recurring": true,
+        "start": "2033-04-16T13:00:00-05:00",
+        "title": "Event 9"
+      },
+      {
+        "all_day": false,
+        "end": "2033-04-17T17:00:00-05:00",
+        "id": "90000000049",
+        "members": [
+          "Member 11"
+        ],
+        "start": "2033-04-17T14:00:00-05:00",
+        "title": "Event 10"
+      },
+      {
+        "all_day": false,
+        "end": "2033-04-18T11:00:00-05:00",
+        "id": "90000000050-1997449200",
+        "members": [
+          "Member 14"
+        ],
+        "recurring": true,
+        "start": "2033-04-18T10:00:00-05:00",
+        "title": "Event 11"
+      },
+      {
+        "all_day": false,
+        "end": "2033-04-18T15:30:00-05:00",
+        "id": "90000000051-1997465400",
+        "members": [
+          "Member 12"
+        ],
+        "recurring": true,
+        "start": "2033-04-18T14:30:00-05:00",
+        "title": "Event 12"
+      },
+      {
+        "all_day": false,
+        "end": "2033-04-18T17:30:00-05:00",
+        "id": "9000000052-1997474400",
+        "location": "location 4",
+        "members": [
+          "Member 11"
+        ],
+        "recurring": true,
+        "start": "2033-04-18T17:00:00-05:00",
+        "title": "Event 13"
+      },
+      {
+        "all_day": true,
+        "end": "2033-04-20T00:00:00-05:00",
+        "id": "9000000053-1997499600",
+        "members": [
+          "Member 14"
+        ],
+        "recurring": true,
+        "start": "2033-04-19T00:00:00-05:00",
+        "title": "Event 14"
+      },
+      {
+        "all_day": false,
+        "end": "2033-04-19T11:00:00-05:00",
+        "id": "90000000054",
+        "location": "location 5",
+        "members": [
+          "Member 1"
+        ],
+        "notes": "description 3",
+        "start": "2033-04-19T10:00:00-05:00",
+        "title": "Event 15"
+      },
+      {
+        "all_day": false,
+        "end": "2033-04-19T18:00:00-05:00",
+        "id": "90000000055-1997560500",
+        "members": [
+          "Member 12"
+        ],
+        "recurring": true,
+        "start": "2033-04-19T16:55:00-05:00",
+        "title": "Event 16"
+      },
+      {
+        "all_day": false,
+        "end": "2033-04-19T18:45:00-05:00",
+        "id": "90000000056-1997562600",
+        "location": "location 3",
+        "members": [
+          "Member 11"
+        ],
+        "notes": "description 2",
+        "recurring": true,
+        "start": "2033-04-19T17:30:00-05:00",
+        "title": "Event 17"
+      },
+      {
+        "all_day": false,
+        "end": "2033-04-19T20:30:00-05:00",
+        "id": "90000000057",
+        "members": [
+          "Member 11"
+        ],
+        "start": "2033-04-19T18:30:00-05:00",
+        "title": "Event 18"
+      },
+      {
+        "all_day": false,
+        "end": "2033-04-19T20:00:00-05:00",
+        "id": "9000000061-1997568000",
+        "location": "location 6",
+        "members": [
+          "Member 8"
+        ],
+        "recurring": true,
+        "start": "2033-04-19T19:00:00-05:00",
+        "title": "Event 20"
+      },
+      {
+        "all_day": false,
+        "end": "2033-04-19T23:00:00-05:00",
+        "id": "90000000062-1997568000",
+        "members": [
+          "Member 13"
+        ],
+        "recurring": true,
+        "start": "2033-04-19T19:00:00-05:00",
+        "title": "Event 21"
+      }
+    ],
+    "timezone": "America/Chicago"
+  },
+  "resultType": "complete"
+}

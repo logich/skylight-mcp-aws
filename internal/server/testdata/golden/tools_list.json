@@ -1,0 +1,253 @@
+[
+  {
+    "description": "Get one Skylight calendar event by the id list_events returned.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "around": {
+          "description": "optional RFC 3339 time near the event's start; speeds up and widens the lookup for non-recurring events",
+          "type": "string"
+        },
+        "event_id": {
+          "description": "an id returned by list_events",
+          "type": "string"
+        }
+      },
+      "required": [
+        "event_id"
+      ],
+      "type": "object"
+    },
+    "name": "get_event",
+    "outputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "event": {
+          "additionalProperties": false,
+          "properties": {
+            "all_day": {
+              "type": "boolean"
+            },
+            "end": {
+              "description": "RFC 3339; for all-day events, midnight after the last day (exclusive)",
+              "type": "string"
+            },
+            "id": {
+              "description": "event id; recurring occurrences have ids like \u003cevent\u003e-\u003cunix start\u003e",
+              "type": "string"
+            },
+            "location": {
+              "type": "string"
+            },
+            "members": {
+              "description": "family members tagged on the event, by name",
+              "items": {
+                "type": "string"
+              },
+              "type": [
+                "null",
+                "array"
+              ]
+            },
+            "notes": {
+              "type": "string"
+            },
+            "recurring": {
+              "type": "boolean"
+            },
+            "start": {
+              "description": "RFC 3339, in the household's timezone",
+              "type": "string"
+            },
+            "title": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "id",
+            "title",
+            "start",
+            "end",
+            "all_day",
+            "members"
+          ],
+          "type": "object"
+        },
+        "timezone": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "timezone",
+        "event"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "description": "Connectivity check. Returns a fixed greeting and the server build version.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "type": "object"
+    },
+    "name": "hello",
+    "outputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "message": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "message",
+        "version"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "description": "List Skylight calendar events overlapping a time range (at most 93 days), with the family members each event is tagged with. Optionally only events tagged with one member.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "end": {
+          "description": "end of the range (exclusive), RFC 3339; at most 93 days after start",
+          "type": "string"
+        },
+        "member": {
+          "description": "optional family member name; only events tagged with them",
+          "type": "string"
+        },
+        "start": {
+          "description": "start of the range, RFC 3339 (e.g. 2026-11-11T00:00:00-06:00)",
+          "type": "string"
+        }
+      },
+      "required": [
+        "start",
+        "end"
+      ],
+      "type": "object"
+    },
+    "name": "list_events",
+    "outputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "events": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "all_day": {
+                "type": "boolean"
+              },
+              "end": {
+                "description": "RFC 3339; for all-day events, midnight after the last day (exclusive)",
+                "type": "string"
+              },
+              "id": {
+                "description": "event id; recurring occurrences have ids like \u003cevent\u003e-\u003cunix start\u003e",
+                "type": "string"
+              },
+              "location": {
+                "type": "string"
+              },
+              "members": {
+                "description": "family members tagged on the event, by name",
+                "items": {
+                  "type": "string"
+                },
+                "type": [
+                  "null",
+                  "array"
+                ]
+              },
+              "notes": {
+                "type": "string"
+              },
+              "recurring": {
+                "type": "boolean"
+              },
+              "start": {
+                "description": "RFC 3339, in the household's timezone",
+                "type": "string"
+              },
+              "title": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "title",
+              "start",
+              "end",
+              "all_day",
+              "members"
+            ],
+            "type": "object"
+          },
+          "type": [
+            "null",
+            "array"
+          ]
+        },
+        "timezone": {
+          "description": "the household's IANA timezone",
+          "type": "string"
+        }
+      },
+      "required": [
+        "timezone",
+        "events"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "description": "List the family members on the Skylight calendar (the people events can be tagged with).",
+    "inputSchema": {
+      "additionalProperties": false,
+      "type": "object"
+    },
+    "name": "list_family_members",
+    "outputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "members": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "color": {
+                "description": "colour as #rrggbb",
+                "type": "string"
+              },
+              "id": {
+                "description": "Skylight category id of the member",
+                "type": "string"
+              },
+              "name": {
+                "description": "display name",
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "name"
+            ],
+            "type": "object"
+          },
+          "type": [
+            "null",
+            "array"
+          ]
+        }
+      },
+      "required": [
+        "members"
+      ],
+      "type": "object"
+    }
+  }
+]

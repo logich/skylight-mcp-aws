@@ -24,6 +24,7 @@ import (
 	"github.com/logich/skylight-mcp-aws/internal/lambdahttp"
 	"github.com/logich/skylight-mcp-aws/internal/server"
 	"github.com/logich/skylight-mcp-aws/internal/skylight"
+	"github.com/logich/skylight-mcp-aws/internal/tools"
 )
 
 // version is set at build time: -ldflags "-X main.version=<git sha>".
@@ -35,6 +36,19 @@ func main() {
 
 	// Missing configuration is not fatal: auth fails closed, so every MCP
 	// request is rejected until it is set.
+	cal, tokens, err := skylightClient(context.Background())
+	if err != nil {
+		// Not fatal for the HTTP side: discovery and auth still work, and
+		// Skylight-backed calls report the configuration error.
+		logger.Error("skylight client not configured", "error", err.Error())
+	}
+	// Only a non-nil *calendar.Client goes into the interface (a typed nil
+	// would look configured).
+	var calendarIface tools.Calendar
+	if cal != nil {
+		calendarIface = cal
+	}
+
 	h := server.New(server.Options{
 		Auth: auth.Config{
 			Issuer:     issuer,
@@ -51,15 +65,9 @@ func main() {
 		TokenURL:     os.Getenv("AUTH_TOKEN_URL"),
 		Version:      version,
 		Logger:       logger,
+		Calendar:     calendarIface,
 	})
 	httpHandler := lambdahttp.Handler(h)
-
-	cal, tokens, err := skylightClient(context.Background())
-	if err != nil {
-		// Not fatal for the HTTP side: discovery and auth still work, and
-		// Skylight-backed calls report the configuration error.
-		logger.Error("skylight client not configured", "error", err.Error())
-	}
 
 	lambda.Start(func(ctx context.Context, raw json.RawMessage) (any, error) {
 		if canary.IsCanary(raw) {

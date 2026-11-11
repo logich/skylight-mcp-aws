@@ -1,0 +1,801 @@
+{
+  "data": [
+    {
+      "attributes": {
+        "color": "#A479E3",
+        "id": 9000011,
+        "label": "Member 1",
+        "linked_to_profile": true,
+        "profile_picture_urls": {
+          "large": null,
+          "medium": null,
+          "original": null,
+          "small": null,
+          "xl": null
+        },
+        "selected_for_chore_chart": false
+      },
+      "id": "9000011",
+      "relationships": {
+        "avatar": {
+          "data": null
+        },
+        "family_member": {
+          "data": null
+        },
+        "hat": {
+          "data": null
+        },
+        "source_calendar_categorizations": {
+          "data": [
+            {
+              "id": "9000012",
+              "type": "source_calendar_categorization"
+            }
+          ]
+        },
+        "source_calendars": {
+          "data": [
+            {
+              "id": "9000013",
+              "type": "source_calendar"
+            }
+          ]
+        }
+      },
+      "type": "category_detail"
+    },
+    {
+      "attributes": {
+        "color": "#CE812D",
+        "id": 9000014,
+        "label": "Member 2",
+        "linked_to_profile": true,
+        "profile_picture_urls": {
+          "large": "https://example.test/image/19.png",
+          "medium": "https://example.test/image/16.png",
+          "original": "https://example.test/image/1.png",
+          "small": "https://example.test/image/17.png",
+          "xl": "https://example.test/image/18.png"
+        },
+        "selected_for_chore_chart": true
+      },
+      "id": "9000014",
+      "relationships": {
+        "avatar": {
+          "data": {
+            "id": "95",
+            "type": "avatar"
+          }
+        },
+        "family_member": {
+          "data": null
+        },
+        "hat": {
+          "data": null
+        },
+        "source_calendar_categorizations": {
+          "data": []
+        },
+        "source_calendars": {
+          "data": []
+        }
+      },
+      "type": "category_detail"
+    },
+    {
+      "attributes": {
+        "color": "#1DA665",
+        "id": 9000015,
+        "label": "Member 3",
+        "linked_to_profile": true,
+        "profile_picture_urls": {
+          "large": null,
+          "medium": null,
+          "original": null,
+          "small": null,
+          "xl": null
+        },
+        "selected_for_chore_chart": false
+      },
+      "id": "9000015",
+      "relationships": {
+        "avatar": {
+          "data": null
+        },
+        "family_member": {
+          "data": null
+        },
+        "hat": {
+          "data": null
+        },
+        "source_calendar_categorizations": {
+          "data": []
+        },
+        "source_calendars": {
+          "data": []
+        }
+      },
+      "type": "category_detail"
+    },
+    {
+      "attributes": {
+        "color": "#CD74E6",
+        "id": 9000016,
+        "label": "Member 4",
+        "linked_to_profile": false,
+        "profile_picture_urls": {
+          "large": null,
+          "medium": null,
+          "original": null,
+          "small": null,
+          "xl": null
+        },
+        "selected_for_chore_chart": false
+      },
+      "id": "9000016",
+      "relationships": {
+        "avatar": {
+          "data": null
+        },
+        "family_member": {
+          "data": null
+        },
+        "hat": {
+          "data": null
+        },
+        "source_calendar_categorizations": {
+          "data": []
+        },
+        "source_calendars": {
+          "data": []
+        }
+      },
+      "type": "category_detail"
+    },
+    {
+      "attributes": {
+        "color": "#FF7537",
+        "id": 9000017,
+        "label": "Member 5",
+        "linked_to_profile": false,
+        "profile_picture_urls": {
+          "large": null,
+          "medium": null,
+          "original": null,
+          "small": null,
+          "xl": null
+        },
+        "selected_for_chore_chart": false
+      },
+      "id": "9000017",
+      "relationships": {
+        "avatar": {
+          "data": null
+        },
+        "family_member": {
+          "data": null
+        },
+        "hat": {
+          "data": null
+        },
+        "source_calendar_categorizations": {
+          "data": []
+        },
+        "source_calendars": {
+          "data": []
+        }
+      },
+      "type": "category_detail"
+    },
+    {
+      "attributes": {
+        "color": "#83B9E9",
+        "id": 9000018,
+        "label": "Member 6",
+        "linked_to_profile": false,
+        "profile_picture_urls": {
+          "large": null,
+          "medium": null,
+          "original": null,
+          "small": null,
+          "xl": null
+        },
+        "selected_for_chore_chart": false
+      },
+      "id": "9000018",
+      "relationships": {
+        "avatar": {
+          "data": null
+        },
+        "family_member": {
+          "data": null
+        },
+        "hat": {
+          "data": null
+        },
+        "source_calendar_categorizations": {
+          "data": []
+        },
+        "source_calendars": {
+          "data": []
+        }
+      },
+      "type": "category_detail"
+    },
+    {
+      "attributes": {
+        "color": "#8DDDE5",
+        "id": 9000019,
+        "label": "Member 7",
+        "linked_to_profile": true,
+        "profile_picture_urls": {
+          "large": null,
+          "medium": null,
+          "original": null,
+          "small": null,
+          "xl": null
+        },
+        "selected_for_chore_chart": false
+      },
+      "id": "9000019",
+      "relationships": {
+        "avatar": {
+          "data": null
+        },
+        "family_member": {
+          "data": null
+        },
+        "hat": {
+          "data": null
+        },
+        "source_calendar_categorizations": {
+          "data": []
+        },
+        "source_calendars": {
+          "data": []
+        }
+      },
+      "type": "category_detail"
+    },
+    {
+      "attributes": {
+        "color": "#E6C800",
+        "id": 9000020,
+        "label": "Member 8",
+        "linked_to_profile": true,
+        "profile_picture_urls": {
+          "large": null,
+          "medium": null,
+          "original": null,
+          "small": null,
+          "xl": null
+        },
+        "selected_for_chore_chart": true
+      },
+      "id": "9000020",
+      "relationships": {
+        "avatar": {
+          "data": null
+        },
+        "family_member": {
+          "data": null
+        },
+        "hat": {
+          "data": null
+        },
+        "source_calendar_categorizations": {
+          "data": [
+            {
+              "id": "90000022",
+              "type": "source_calendar_categorization"
+            }
+          ]
+        },
+        "source_calendars": {
+          "data": [
+            {
+              "id": "9000021",
+              "type": "source_calendar"
+            }
+          ]
+        }
+      },
+      "type": "category_detail"
+    },
+    {
+      "attributes": {
+        "color": "#4A86E7",
+        "id": 9000023,
+        "label": "Member 9",
+        "linked_to_profile": true,
+        "profile_picture_urls": {
+          "large": null,
+          "medium": null,
+          "original": null,
+          "small": null,
+          "xl": null
+        },
+        "selected_for_chore_chart": false
+      },
+      "id": "9000023",
+      "relationships": {
+        "avatar": {
+          "data": null
+        },
+        "family_member": {
+          "data": null
+        },
+        "hat": {
+          "data": null
+        },
+        "source_calendar_categorizations": {
+          "data": []
+        },
+        "source_calendars": {
+          "data": []
+        }
+      },
+      "type": "category_detail"
+    },
+    {
+      "attributes": {
+        "color": "#F9CD50",
+        "id": 9000024,
+        "label": "Member 10",
+        "linked_to_profile": false,
+        "profile_picture_urls": {
+          "large": null,
+          "medium": null,
+          "original": null,
+          "small": null,
+          "xl": null
+        },
+        "selected_for_chore_chart": false
+      },
+      "id": "9000024",
+      "relationships": {
+        "avatar": {
+          "data": null
+        },
+        "family_member": {
+          "data": null
+        },
+        "hat": {
+          "data": null
+        },
+        "source_calendar_categorizations": {
+          "data": [
+            {
+              "id": "9000026",
+              "type": "source_calendar_categorization"
+            }
+          ]
+        },
+        "source_calendars": {
+          "data": [
+            {
+              "id": "9000025",
+              "type": "source_calendar"
+            }
+          ]
+        }
+      },
+      "type": "category_detail"
+    },
+    {
+      "attributes": {
+        "color": "#F8CC50",
+        "id": 9000027,
+        "label": "Member 11",
+        "linked_to_profile": true,
+        "profile_picture_urls": {
+          "large": "https://example.test/image/23.png",
+          "medium": "https://example.test/image/20.png",
+          "original": "https://example.test/image/5.png",
+          "small": "https://example.test/image/21.png",
+          "xl": "https://example.test/image/22.png"
+        },
+        "selected_for_chore_chart": true
+      },
+      "id": "9000027",
+      "relationships": {
+        "avatar": {
+          "data": {
+            "id": "906",
+            "type": "avatar"
+          }
+        },
+        "family_member": {
+          "data": null
+        },
+        "hat": {
+          "data": null
+        },
+        "source_calendar_categorizations": {
+          "data": []
+        },
+        "source_calendars": {
+          "data": []
+        }
+      },
+      "type": "category_detail"
+    },
+    {
+      "attributes": {
+        "color": "#F791B3",
+        "id": 9000028,
+        "label": "Member 12",
+        "linked_to_profile": true,
+        "profile_picture_urls": {
+          "large": "https://example.test/image/25.png",
+          "medium": "https://example.test/image/26.png",
+          "original": "https://example.test/image/6.png",
+          "small": "https://example.test/image/27.png",
+          "xl": "https://example.test/image/24.png"
+        },
+        "selected_for_chore_chart": true
+      },
+      "id": "9000028",
+      "relationships": {
+        "avatar": {
+          "data": {
+            "id": "907",
+            "type": "avatar"
+          }
+        },
+        "family_member": {
+          "data": null
+        },
+        "hat": {
+          "data": null
+        },
+        "source_calendar_categorizations": {
+          "data": []
+        },
+        "source_calendars": {
+          "data": []
+        }
+      },
+      "type": "category_detail"
+    },
+    {
+      "attributes": {
+        "color": "#F63922",
+        "id": 9000029,
+        "label": "Member 13",
+        "linked_to_profile": true,
+        "profile_picture_urls": {
+          "large": "https://example.test/image/31.png",
+          "medium": "https://example.test/image/28.png",
+          "original": "https://example.test/image/10.png",
+          "small": "https://example.test/image/29.png",
+          "xl": "https://example.test/image/30.png"
+        },
+        "selected_for_chore_chart": true
+      },
+      "id": "9000029",
+      "relationships": {
+        "avatar": {
+          "data": {
+            "id": "98",
+            "type": "avatar"
+          }
+        },
+        "family_member": {
+          "data": null
+        },
+        "hat": {
+          "data": null
+        },
+        "source_calendar_categorizations": {
+          "data": [
+            {
+              "id": "9000031",
+              "type": "source_calendar_categorization"
+            }
+          ]
+        },
+        "source_calendars": {
+          "data": [
+            {
+              "id": "9000030",
+              "type": "source_calendar"
+            }
+          ]
+        }
+      },
+      "type": "category_detail"
+    },
+    {
+      "attributes": {
+        "color": "#A379E2",
+        "id": 9000032,
+        "label": "Member 14",
+        "linked_to_profile": true,
+        "profile_picture_urls": {
+          "large": "https://example.test/image/33.png",
+          "medium": "https://example.test/image/34.png",
+          "original": "https://example.test/image/14.png",
+          "small": "https://example.test/image/35.png",
+          "xl": "https://example.test/image/32.png"
+        },
+        "selected_for_chore_chart": true
+      },
+      "id": "9000032",
+      "relationships": {
+        "avatar": {
+          "data": {
+            "id": "909",
+            "type": "avatar"
+          }
+        },
+        "family_member": {
+          "data": null
+        },
+        "hat": {
+          "data": null
+        },
+        "source_calendar_categorizations": {
+          "data": []
+        },
+        "source_calendars": {
+          "data": []
+        }
+      },
+      "type": "category_detail"
+    },
+    {
+      "attributes": {
+        "color": "#A8D4D3",
+        "id": 9000033,
+        "label": "Member 15",
+        "linked_to_profile": true,
+        "profile_picture_urls": {
+          "large": "https://example.test/image/37.png",
+          "medium": "https://example.test/image/38.png",
+          "original": "https://example.test/image/15.png",
+          "small": "https://example.test/image/39.png",
+          "xl": "https://example.test/image/36.png"
+        },
+        "selected_for_chore_chart": true
+      },
+      "id": "9000033",
+      "relationships": {
+        "avatar": {
+          "data": {
+            "id": "90",
+            "type": "avatar"
+          }
+        },
+        "family_member": {
+          "data": null
+        },
+        "hat": {
+          "data": null
+        },
+        "source_calendar_categorizations": {
+          "data": []
+        },
+        "source_calendars": {
+          "data": []
+        }
+      },
+      "type": "category_detail"
+    },
+    {
+      "attributes": {
+        "color": "#CF632E",
+        "id": 90000034,
+        "label": "Member 16",
+        "linked_to_profile": false,
+        "profile_picture_urls": {
+          "large": null,
+          "medium": null,
+          "original": null,
+          "small": null,
+          "xl": null
+        },
+        "selected_for_chore_chart": false
+      },
+      "id": "90000034",
+      "relationships": {
+        "avatar": {
+          "data": null
+        },
+        "family_member": {
+          "data": null
+        },
+        "hat": {
+          "data": null
+        },
+        "source_calendar_categorizations": {
+          "data": [
+            {
+              "id": "90000035",
+              "type": "source_calendar_categorization"
+            }
+          ]
+        },
+        "source_calendars": {
+          "data": [
+            {
+              "id": "9000021",
+              "type": "source_calendar"
+            }
+          ]
+        }
+      },
+      "type": "category_detail"
+    },
+    {
+      "attributes": {
+        "color": "#F66951",
+        "id": 90000036,
+        "label": "Member 17",
+        "linked_to_profile": false,
+        "profile_picture_urls": {
+          "large": null,
+          "medium": null,
+          "original": null,
+          "small": null,
+          "xl": null
+        },
+        "selected_for_chore_chart": false
+      },
+      "id": "90000036",
+      "relationships": {
+        "avatar": {
+          "data": null
+        },
+        "family_member": {
+          "data": null
+        },
+        "hat": {
+          "data": null
+        },
+        "source_calendar_categorizations": {
+          "data": []
+        },
+        "source_calendars": {
+          "data": []
+        }
+      },
+      "type": "category_detail"
+    }
+  ],
+  "included": [
+    {
+      "attributes": {
+        "display_position": null,
+        "image_url": "https://example.test/image/1.png",
+        "kind": "default",
+        "name": "name 3",
+        "reward_animations": []
+      },
+      "id": "95",
+      "type": "avatar"
+    },
+    {
+      "attributes": {
+        "display_position": 0,
+        "image_url": "https://example.test/image/5.png",
+        "kind": "disney",
+        "name": "name 4",
+        "reward_animations": [
+          {
+            "asset_url": "https://example.test/image/2.png",
+            "cache_key": "cache-key 1",
+            "landscape_layout": "landscape-layout 1",
+            "message": "message 1",
+            "portrait_layout": "portrait-layout 1"
+          },
+          {
+            "asset_url": "https://example.test/image/3.png",
+            "cache_key": "cache-key 2",
+            "landscape_layout": "landscape-layout 1",
+            "message": "message 2",
+            "portrait_layout": "portrait-layout 1"
+          },
+          {
+            "asset_url": "https://example.test/image/4.png",
+            "cache_key": "cache-key 3",
+            "landscape_layout": "landscape-layout 1",
+            "message": "message 3",
+            "portrait_layout": "portrait-layout 1"
+          }
+        ]
+      },
+      "id": "906",
+      "type": "avatar"
+    },
+    {
+      "attributes": {
+        "display_position": 0,
+        "image_url": "https://example.test/image/6.png",
+        "kind": "disney",
+        "name": "name 5",
+        "reward_animations": [
+          {
+            "asset_url": "https://example.test/image/7.png",
+            "cache_key": "cache-key 4",
+            "landscape_layout": "landscape-layout 1",
+            "message": "message 4",
+            "portrait_layout": "portrait-layout 1"
+          },
+          {
+            "asset_url": "https://example.test/image/8.png",
+            "cache_key": "cache-key 5",
+            "landscape_layout": "landscape-layout 1",
+            "message": "message 5",
+            "portrait_layout": "portrait-layout 1"
+          },
+          {
+            "asset_url": "https://example.test/image/9.png",
+            "cache_key": "cache-key 6",
+            "landscape_layout": "landscape-layout 2",
+            "message": "message 6",
+            "portrait_layout": "portrait-layout 2"
+          }
+        ]
+      },
+      "id": "907",
+      "type": "avatar"
+    },
+    {
+      "attributes": {
+        "display_position": null,
+        "image_url": "https://example.test/image/10.png",
+        "kind": "default",
+        "name": "name 6",
+        "reward_animations": []
+      },
+      "id": "98",
+      "type": "avatar"
+    },
+    {
+      "attributes": {
+        "display_position": 0,
+        "image_url": "https://example.test/image/14.png",
+        "kind": "disney",
+        "name": "name 7",
+        "reward_animations": [
+          {
+            "asset_url": "https://example.test/image/11.png",
+            "cache_key": "cache-key 7",
+            "landscape_layout": "landscape-layout 1",
+            "message": "message 7",
+            "portrait_layout": "portrait-layout 1"
+          },
+          {
+            "asset_url": "https://example.test/image/12.png",
+            "cache_key": "cache-key 8",
+            "landscape_layout": "landscape-layout 1",
+            "message": "message 8",
+            "portrait_layout": "portrait-layout 1"
+          },
+          {
+            "asset_url": "https://example.test/image/13.png",
+            "cache_key": "cache-key 9",
+            "landscape_layout": "landscape-layout 1",
+            "message": "message 9",
+            "portrait_layout": "portrait-layout 1"
+          }
+        ]
+      },
+      "id": "909",
+      "type": "avatar"
+    },
+    {
+      "attributes": {
+        "display_position": null,
+        "image_url": "https://example.test/image/15.png",
+        "kind": "default",
+        "name": "name 8",
+        "reward_animations": []
+      },
+      "id": "90",
+      "type": "avatar"
+    }
+  ]
+}

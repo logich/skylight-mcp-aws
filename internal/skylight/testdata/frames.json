@@ -1,0 +1,189 @@
+{
+  "data": [
+    {
+      "attributes": {
+        "access": "access 1",
+        "apps": [
+          "apps 1"
+        ],
+        "assistant_household_id": null,
+        "blur_effect": false,
+        "brightness": 0,
+        "current_album_id": 0,
+        "currently_sleeping": false,
+        "destroyed_at": null,
+        "feature_bundle": {
+          "albums": {
+            "enabled": true
+          },
+          "app_slideshow": {
+            "enabled": true
+          },
+          "bundle_name": "bundle-name 1",
+          "bundle_names": [
+            "bundle-names 1",
+            "bundle-names 2"
+          ],
+          "captions": {
+            "enabled": true
+          },
+          "character_accessories": {
+            "enabled": true
+          },
+          "character_customization": {
+            "enabled": true
+          },
+          "chores": {
+            "enabled": true
+          },
+          "countdowns": {
+            "enabled": true
+          },
+          "dinner_plans": {
+            "enabled": false
+          },
+          "disney": {
+            "enabled": true
+          },
+          "doodles": {
+            "enabled": true
+          },
+          "greeting_cards": {
+            "enabled": true
+          },
+          "habit_tracking": {
+            "enabled": true
+          },
+          "lists": {
+            "enabled": true
+          },
+          "magic_import": {
+            "enabled": true
+          },
+          "meal_planning": {
+            "enabled": true,
+            "unsupported_hardware": false
+          },
+          "nudges": {
+            "enabled": true
+          },
+          "photos": {
+            "enabled": true
+          },
+          "recipes": {
+            "enabled": true
+          },
+          "remote_settings": {
+            "enabled": true
+          },
+          "rewards": {
+            "enabled": true,
+            "unsupported_hardware": false
+          },
+          "screensaver": {
+            "enabled": true
+          },
+          "shortcut": {
+            "enabled": true
+          },
+          "sidekick": {
+            "enabled": true
+          },
+          "timers": {
+            "enabled": true
+          },
+          "videos": {
+            "enabled": true
+          }
+        },
+        "gift_recipient_name": null,
+        "gift_status": "gift-status 1",
+        "household_name": null,
+        "locale": "en",
+        "message_viewability": "message-viewability 1",
+        "mine": false,
+        "name": "name 1",
+        "notification_email": "person1@example.test",
+        "notify_on_new_photos": false,
+        "open_to_public": false,
+        "plus": true,
+        "plus_trial_offers": [],
+        "role": "member",
+        "show_caption": true,
+        "show_heart": false,
+        "side_by_side": false,
+        "sleep_mode_on": true,
+        "sleeps_at": "12:00",
+        "slideshow_speed": 0,
+        "slideshow_style": 0,
+        "start_sound": false,
+        "timezone": "America/Chicago",
+        "trial_expires_at": null,
+        "trialing": false,
+        "user_created_at": "2031-01-14T19:57:42.150-06:00",
+        "wakes_at": "12:00"
+      },
+      "id": "9000001",
+      "relationships": {
+        "devices": {
+          "data": [
+            {
+              "id": "9000002",
+              "type": "device"
+            }
+          ]
+        },
+        "event_notification_setting": {
+          "data": {
+            "id": "900004",
+            "type": "event_notification_setting"
+          }
+        },
+        "user": {
+          "data": {
+            "id": "9000003",
+            "type": "user"
+          }
+        }
+      },
+      "type": "approved_viewer_frame"
+    }
+  ],
+  "included": [
+    {
+      "attributes": {
+        "activated": true,
+        "blur_effect": false,
+        "brightness": 0,
+        "category_id": null,
+        "current_album_id": 0,
+        "currently_sleeping": false,
+        "name": "name 2",
+        "nightlight": false,
+        "nightlight_brightness": 0,
+        "nightlight_color": "nightlight-color 1",
+        "notify_on_new_photos": false,
+        "role": "calendar",
+        "show_caption": true,
+        "show_heart": false,
+        "side_by_side": false,
+        "sleep_mode": "sleep-mode 1",
+        "sleep_mode_on": true,
+        "sleep_sound": null,
+        "sleep_sound_volume": 0,
+        "sleeps_at": "12:00",
+        "slideshow_speed": 0,
+        "slideshow_style": 0,
+        "start_sound": false,
+        "timezone": "America/Chicago",
+        "wakes_at": "12:00"
+      },
+      "id": "9000002",
+      "type": "device"
+    }
+  ],
+  "meta": {
+    "bulk_features": false,
+    "trial_days_remaining": null
+  }
+}

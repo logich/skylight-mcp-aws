@@ -13,8 +13,6 @@ import (
 	"unicode/utf8"
 
 	"github.com/aws/aws-lambda-go/events"
-
-	"github.com/logich/skylight-mcp-aws/internal/auth"
 )
 
 // Handler returns a function suitable for lambda.Start.
@@ -39,9 +37,9 @@ func toRequest(ctx context.Context, ev events.APIGatewayV2HTTPRequest) (*http.Re
 		}
 	}
 
-	if authz := ev.RequestContext.Authorizer; authz != nil && authz.JWT != nil {
-		ctx = auth.WithClaims(ctx, authz.JWT.Claims)
-	}
+	// Deliberately ignored: ev.RequestContext.Authorizer. Claims in the event
+	// are whatever the invoker put there; the server verifies the bearer token
+	// in the Authorization header itself (internal/auth).
 
 	u := url.URL{Path: ev.RawPath, RawQuery: ev.RawQueryString}
 	req, err := http.NewRequestWithContext(ctx, ev.RequestContext.HTTP.Method, u.String(), bytes.NewReader(body))

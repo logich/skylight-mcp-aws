@@ -17,6 +17,9 @@ import (
 // Options configures the handler.
 type Options struct {
 	Auth auth.Config
+	// Keys verifies bearer-token signatures (Cognito's JWKS). Required: with
+	// no keys every MCP request is rejected.
+	Keys *auth.KeySet
 	// AuthorizeURL and TokenURL are Cognito's hosted-UI OAuth endpoints. They
 	// are advertised in the authorization-server metadata below; the server
 	// never issues tokens itself.
@@ -50,18 +53,12 @@ func New(o Options) http.Handler {
 	// root and the path-suffixed forms are registered because clients differ.
 	mux.HandleFunc("GET /.well-known/oauth-protected-resource", protectedResource(o))
 	mux.HandleFunc("GET /.well-known/oauth-protected-resource/mcp", protectedResource(o))
-	// Some clients look for authorization-server metadata on the resource's own
-	// host (RFC 8414 / OIDC discovery) rather than following the pointer above.
-	// Serve a description of Cognito's endpoints there. It only describes; it
-	// issues nothing.
-	for _, p := range []string{
-		"/.well-known/oauth-authorization-server",
-		"/.well-known/oauth-authorization-server/mcp",
-		"/.well-known/openid-configuration",
-		"/.well-known/openid-configuration/mcp",
-	} {
-		mux.HandleFunc("GET "+p, authorizationServer(o))
-	}
+	// RFC 8414 authorization-server metadata describing Cognito's endpoints.
+	// This host is the declared authorization server (see protectedResource).
+	// It only describes; it issues nothing. No OIDC discovery document: the
+	// server uses no OpenID scopes, so there is no ID token to describe.
+	mux.HandleFunc("GET /.well-known/oauth-authorization-server", authorizationServer(o))
+	mux.HandleFunc("GET /.well-known/oauth-authorization-server/mcp", authorizationServer(o))
 	mux.Handle("/mcp", requireAuth(o, mcpHandler))
 	return logRequests(o.Logger, mux)
 }
@@ -86,6 +83,7 @@ func protectedResource(o Options) http.HandlerFunc {
 			// Cognito's issuer URL directly breaks clients that only try RFC 8414.
 			"authorization_servers":    []string{"https://" + r.Host},
 			"bearer_methods_supported": []string{"header"},
+			"scopes_supported":         []string{o.Auth.Scope},
 		}
 		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set("Cache-Control", "max-age=300")
@@ -110,7 +108,7 @@ func authorizationServer(o Options) http.HandlerFunc {
 			"grant_types_supported":                 []string{"authorization_code", "refresh_token"},
 			"code_challenge_methods_supported":      []string{"S256"},
 			"token_endpoint_auth_methods_supported": []string{"client_secret_basic", "client_secret_post"},
-			"scopes_supported":                      []string{"openid", "email"},
+			"scopes_supported":                      []string{o.Auth.Scope},
 		}
 		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set("Cache-Control", "max-age=300")
@@ -120,7 +118,9 @@ func authorizationServer(o Options) http.HandlerFunc {
 
 func requireAuth(o Options, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if err := auth.Authorize(o.Auth, auth.ClaimsFrom(r.Context()), o.Now()); err != nil {
+		// The token itself is verified here; nothing from the invocation event
+		// (such as API Gateway's authorizer claims) is trusted.
+		if err := auth.Check(r.Context(), o.Auth, o.Keys, r.Header.Get("Authorization"), o.Now()); err != nil {
 			o.Logger.Warn("rejected", "reason", auth.Reason(err))
 			w.Header().Set("WWW-Authenticate",
 				`Bearer resource_metadata="https://`+r.Host+`/.well-known/oauth-protected-resource"`)

@@ -2,7 +2,7 @@ package auth
 
 import (
 	"errors"
-	"strconv"
+	"math"
 	"testing"
 	"time"
 )
@@ -11,25 +11,26 @@ const (
 	testIssuer = "https://cognito-idp.us-east-2.amazonaws.com/us-east-2_TESTPOOL"
 	testClient = "client-abc"
 	testSub    = "11111111-2222-3333-4444-555555555555"
+	testScope  = "skylight-mcp/invoke"
+	testAud    = "https://abc.execute-api.us-east-2.amazonaws.com/mcp"
 )
 
 var testNow = time.Unix(1_800_000_000, 0)
 
-func cfg() Config { return Config{Issuer: testIssuer, ClientID: testClient, AllowedSub: testSub} }
+func cfg() Config {
+	return Config{Issuer: testIssuer, ClientID: testClient, AllowedSub: testSub, Scope: testScope, Audience: testAud}
+}
 
-func good() map[string]string {
-	return map[string]string{
-		"iss":       testIssuer,
-		"token_use": "access",
-		"client_id": testClient,
-		"exp":       strconv.FormatInt(testNow.Unix()+600, 10),
-		"sub":       testSub,
+func good() Claims {
+	return Claims{
+		Issuer: testIssuer, TokenUse: "access", ClientID: testClient,
+		Subject: testSub, Scope: testScope, Exp: float64(testNow.Unix() + 600),
 	}
 }
 
-func with(mut func(map[string]string)) map[string]string {
+func with(mut func(*Claims)) Claims {
 	c := good()
-	mut(c)
+	mut(&c)
 	return c
 }
 
@@ -37,10 +38,16 @@ func TestAuthorizeAccepts(t *testing.T) {
 	if err := Authorize(cfg(), good(), testNow); err != nil {
 		t.Fatalf("valid claims rejected: %v", err)
 	}
-	// API Gateway may stringify numbers in scientific notation.
-	c := with(func(c map[string]string) { c["exp"] = "1.8000006e+09" })
-	if err := Authorize(cfg(), c, testNow); err != nil {
-		t.Fatalf("scientific-notation exp rejected: %v", err)
+	for name, aud := range map[string][]string{
+		"aud absent": nil, "aud ours": {testAud}, "aud list incl ours": {"https://other.example/x", testAud},
+	} {
+		if err := Authorize(cfg(), with(func(c *Claims) { c.Audience = aud }), testNow); err != nil {
+			t.Fatalf("%s rejected: %v", name, err)
+		}
+	}
+	multi := with(func(c *Claims) { c.Scope = "other/read " + testScope + " x" })
+	if err := Authorize(cfg(), multi, testNow); err != nil {
+		t.Fatalf("scope among several rejected: %v", err)
 	}
 }
 
@@ -48,36 +55,44 @@ func TestAuthorizeRejects(t *testing.T) {
 	tests := []struct {
 		name   string
 		cfg    Config
-		claims map[string]string
+		claims Claims
 		want   string
 	}{
-		{"nil claims", cfg(), nil, "no_claims"},
-		{"empty claims", cfg(), map[string]string{}, "no_claims"},
-		{"issuer missing", cfg(), with(func(c map[string]string) { delete(c, "iss") }), "issuer"},
-		{"issuer other pool", cfg(), with(func(c map[string]string) { c["iss"] = testIssuer + "X" }), "issuer"},
-		{"issuer prefix only", cfg(), with(func(c map[string]string) { c["iss"] = "https://cognito-idp.us-east-2.amazonaws.com/" }), "issuer"},
-		{"id token", cfg(), with(func(c map[string]string) { c["token_use"] = "id" }), "token_use"},
-		{"token_use missing", cfg(), with(func(c map[string]string) { delete(c, "token_use") }), "token_use"},
-		{"token_use case", cfg(), with(func(c map[string]string) { c["token_use"] = "Access" }), "token_use"},
-		{"client missing", cfg(), with(func(c map[string]string) { delete(c, "client_id") }), "client_id"},
-		{"client other", cfg(), with(func(c map[string]string) { c["client_id"] = "other" }), "client_id"},
-		{"exp missing", cfg(), with(func(c map[string]string) { delete(c, "exp") }), "exp_invalid"},
-		{"exp empty", cfg(), with(func(c map[string]string) { c["exp"] = "" }), "exp_invalid"},
-		{"exp garbage", cfg(), with(func(c map[string]string) { c["exp"] = "soon" }), "exp_invalid"},
-		{"exp NaN", cfg(), with(func(c map[string]string) { c["exp"] = "NaN" }), "exp_invalid"},
-		{"exp Inf", cfg(), with(func(c map[string]string) { c["exp"] = "+Inf" }), "exp_invalid"},
-		{"expired", cfg(), with(func(c map[string]string) { c["exp"] = strconv.FormatInt(testNow.Unix()-1, 10) }), "expired"},
-		{"expires exactly now", cfg(), with(func(c map[string]string) { c["exp"] = strconv.FormatInt(testNow.Unix(), 10) }), "expired"},
-		{"sub missing", cfg(), with(func(c map[string]string) { delete(c, "sub") }), "subject"},
-		{"sub empty", cfg(), with(func(c map[string]string) { c["sub"] = "" }), "subject"},
-		{"sub other user", cfg(), with(func(c map[string]string) { c["sub"] = "99999999-2222-3333-4444-555555555555" }), "subject"},
-		{"sub prefix of allowed", cfg(), with(func(c map[string]string) { c["sub"] = testSub[:10] }), "subject"},
-		{"sub has suffix", cfg(), with(func(c map[string]string) { c["sub"] = testSub + "0" }), "subject"},
-		{"sub different case", cfg(), with(func(c map[string]string) { c["sub"] = "AAAAAAAA" }), "subject"},
-		{"unconfigured issuer", Config{ClientID: testClient, AllowedSub: testSub}, good(), "not_configured"},
-		{"unconfigured client", Config{Issuer: testIssuer, AllowedSub: testSub}, good(), "not_configured"},
-		{"unconfigured sub", Config{Issuer: testIssuer, ClientID: testClient}, good(), "not_configured"},
-		{"all unconfigured, empty sub claim", Config{}, map[string]string{"sub": ""}, "not_configured"},
+		{"zero claims", cfg(), Claims{}, "issuer"},
+		{"issuer other pool", cfg(), with(func(c *Claims) { c.Issuer = testIssuer + "X" }), "issuer"},
+		{"issuer prefix only", cfg(), with(func(c *Claims) { c.Issuer = "https://cognito-idp.us-east-2.amazonaws.com/" }), "issuer"},
+		{"issuer missing", cfg(), with(func(c *Claims) { c.Issuer = "" }), "issuer"},
+		{"id token", cfg(), with(func(c *Claims) { c.TokenUse = "id" }), "token_use"},
+		{"token_use missing", cfg(), with(func(c *Claims) { c.TokenUse = "" }), "token_use"},
+		{"token_use case", cfg(), with(func(c *Claims) { c.TokenUse = "Access" }), "token_use"},
+		{"client missing", cfg(), with(func(c *Claims) { c.ClientID = "" }), "client_id"},
+		{"client other", cfg(), with(func(c *Claims) { c.ClientID = "other" }), "client_id"},
+		{"scope missing", cfg(), with(func(c *Claims) { c.Scope = "" }), "scope"},
+		{"scope only cognito admin", cfg(), with(func(c *Claims) { c.Scope = "aws.cognito.signin.user.admin" }), "scope"},
+		{"scope openid email", cfg(), with(func(c *Claims) { c.Scope = "openid email" }), "scope"},
+		{"scope superstring", cfg(), with(func(c *Claims) { c.Scope = testScope + "-admin" }), "scope"},
+		{"scope substring", cfg(), with(func(c *Claims) { c.Scope = "skylight-mcp/invok" }), "scope"},
+		{"aud other resource", cfg(), with(func(c *Claims) { c.Audience = []string{"https://evil.example/mcp"} }), "audience"},
+		{"aud prefix of ours", cfg(), with(func(c *Claims) { c.Audience = []string{testAud[:20]} }), "audience"},
+		{"aud ours with suffix", cfg(), with(func(c *Claims) { c.Audience = []string{testAud + "/x"} }), "audience"},
+		{"aud empty string", cfg(), with(func(c *Claims) { c.Audience = []string{""} }), "audience"},
+		{"aud is client id", cfg(), with(func(c *Claims) { c.Audience = []string{testClient} }), "audience"},
+		{"exp missing", cfg(), with(func(c *Claims) { c.Exp = 0 }), "exp_invalid"},
+		{"exp negative", cfg(), with(func(c *Claims) { c.Exp = -5 }), "exp_invalid"},
+		{"exp NaN", cfg(), with(func(c *Claims) { c.Exp = math.NaN() }), "exp_invalid"},
+		{"exp Inf", cfg(), with(func(c *Claims) { c.Exp = math.Inf(1) }), "exp_invalid"},
+		{"expired", cfg(), with(func(c *Claims) { c.Exp = float64(testNow.Unix() - 1) }), "expired"},
+		{"expires exactly now", cfg(), with(func(c *Claims) { c.Exp = float64(testNow.Unix()) }), "expired"},
+		{"sub missing", cfg(), with(func(c *Claims) { c.Subject = "" }), "subject"},
+		{"sub other user", cfg(), with(func(c *Claims) { c.Subject = "99999999-2222-3333-4444-555555555555" }), "subject"},
+		{"sub prefix of allowed", cfg(), with(func(c *Claims) { c.Subject = testSub[:10] }), "subject"},
+		{"sub has suffix", cfg(), with(func(c *Claims) { c.Subject = testSub + "0" }), "subject"},
+		{"unconfigured issuer", Config{ClientID: testClient, AllowedSub: testSub, Scope: testScope, Audience: testAud}, good(), "not_configured"},
+		{"unconfigured client", Config{Issuer: testIssuer, AllowedSub: testSub, Scope: testScope, Audience: testAud}, good(), "not_configured"},
+		{"unconfigured sub", Config{Issuer: testIssuer, ClientID: testClient, Scope: testScope, Audience: testAud}, good(), "not_configured"},
+		{"unconfigured scope", Config{Issuer: testIssuer, ClientID: testClient, AllowedSub: testSub, Audience: testAud}, good(), "not_configured"},
+		{"unconfigured audience", Config{Issuer: testIssuer, ClientID: testClient, AllowedSub: testSub, Scope: testScope}, good(), "not_configured"},
+		{"all unconfigured, empty claims", Config{}, Claims{}, "not_configured"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -95,39 +110,22 @@ func TestAuthorizeRejects(t *testing.T) {
 	}
 }
 
-// A single failing claim among otherwise valid ones must always reject: mutate
-// each required claim to a bad value and confirm nothing slips through.
-func TestAuthorizeEveryClaimIsRequired(t *testing.T) {
-	for _, key := range []string{"iss", "token_use", "client_id", "exp", "sub"} {
-		c := good()
-		delete(c, key)
-		if err := Authorize(cfg(), c, testNow); err == nil {
-			t.Errorf("accepted claims with %q removed", key)
-		}
-	}
-}
-
 func TestReasonNeverContainsClaimValues(t *testing.T) {
-	c := with(func(c map[string]string) { c["sub"] = "secret-sub-value" })
-	err := Authorize(cfg(), c, testNow)
-	if err == nil {
-		t.Fatal("expected rejection")
-	}
-	if msg := err.Error(); msg != "unauthorized: subject" {
-		t.Fatalf("unexpected error text %q", msg)
+	err := Authorize(cfg(), with(func(c *Claims) { c.Subject = "secret-sub-value" }), testNow)
+	if err == nil || err.Error() != "unauthorized: subject" {
+		t.Fatalf("unexpected error %v", err)
 	}
 }
 
 func FuzzAuthorize(f *testing.F) {
-	f.Add("iss", "access", "client-abc", "1800000600", testSub)
-	f.Add("", "", "", "", "")
-	f.Fuzz(func(t *testing.T, iss, use, client, exp, sub string) {
-		claims := map[string]string{"iss": iss, "token_use": use, "client_id": client, "exp": exp, "sub": sub}
-		err := Authorize(cfg(), claims, testNow)
-		if err == nil {
-			// Acceptance is only legal for exactly the valid shape.
-			if iss != testIssuer || use != "access" || client != testClient || sub != testSub {
-				t.Fatalf("accepted unexpected claims: %q %q %q %q", iss, use, client, sub)
+	f.Add(testIssuer, "access", testClient, testSub, testScope, float64(testNow.Unix()+600))
+	f.Add("", "", "", "", "", 0.0)
+	f.Fuzz(func(t *testing.T, iss, use, client, sub, scope string, exp float64) {
+		c := Claims{Issuer: iss, TokenUse: use, ClientID: client, Subject: sub, Scope: scope, Exp: exp}
+		if Authorize(cfg(), c, testNow) == nil {
+			if iss != testIssuer || use != "access" || client != testClient || sub != testSub ||
+				!hasScope(scope, testScope) || exp <= float64(testNow.Unix()) {
+				t.Fatalf("accepted unexpected claims: %+v", c)
 			}
 		}
 	})

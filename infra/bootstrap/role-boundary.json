@@ -1,0 +1,51 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "OwnLogs",
+      "Effect": "Allow",
+      "Action": ["logs:CreateLogStream", "logs:PutLogEvents"],
+      "Resource": [
+        "arn:aws:logs:us-east-2:${ACCOUNT}:log-group:/aws/lambda/skylight-mcp*",
+        "arn:aws:logs:us-east-2:${ACCOUNT}:log-group:/aws/apigateway/skylight-mcp*"
+      ]
+    },
+    {
+      "Sid": "OwnTokenTable",
+      "Effect": "Allow",
+      "Action": ["dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:UpdateItem", "dynamodb:DescribeTable"],
+      "Resource": "arn:aws:dynamodb:us-east-2:${ACCOUNT}:table/SkylightMcp*"
+    },
+    {
+      "Sid": "KmsOnlyViaDynamoDB",
+      "Effect": "Allow",
+      "Action": ["kms:Decrypt", "kms:Encrypt", "kms:GenerateDataKey", "kms:DescribeKey"],
+      "Resource": "arn:aws:kms:us-east-2:${ACCOUNT}:key/*",
+      "Condition": { "StringEquals": { "kms:ViaService": "dynamodb.us-east-2.amazonaws.com" } }
+    },
+    {
+      "Sid": "InvokeOwnFunctionsSchedulerAndHooks",
+      "Effect": "Allow",
+      "Action": ["lambda:InvokeFunction"],
+      "Resource": "arn:aws:lambda:us-east-2:${ACCOUNT}:function:skylight-mcp*"
+    },
+    {
+      "Sid": "CodeDeployShiftOwnAlias",
+      "Effect": "Allow",
+      "Action": ["lambda:GetAlias", "lambda:UpdateAlias", "lambda:GetProvisionedConcurrencyConfig"],
+      "Resource": "arn:aws:lambda:us-east-2:${ACCOUNT}:function:skylight-mcp*"
+    },
+    {
+      "Sid": "AlertOwnTopic",
+      "Effect": "Allow",
+      "Action": ["sns:Publish"],
+      "Resource": "arn:aws:sns:us-east-2:${ACCOUNT}:SkylightMcp*"
+    },
+    {
+      "Sid": "NoResourceLevelSupport",
+      "Effect": "Allow",
+      "Action": ["cloudwatch:DescribeAlarms", "codedeploy:PutLifecycleEventHookExecutionStatus"],
+      "Resource": "*"
+    }
+  ]
+}

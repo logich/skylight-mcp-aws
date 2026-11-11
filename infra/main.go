@@ -25,7 +25,11 @@ import (
 	"github.com/aws/jsii-runtime-go"
 )
 
-const region = "us-east-2"
+const (
+	region           = "us-east-2"
+	resourceServerID = "skylight-mcp"
+	scopeName        = "invoke" // token scope: "skylight-mcp/invoke"
+)
 
 // Claude's custom-connector OAuth callbacks.
 var callbackURLs = []*string{
@@ -43,10 +47,16 @@ func ctxString(scope constructs.Construct, key string) string {
 func NewSkylightStack(scope constructs.Construct, id string, props *awscdk.StackProps) awscdk.Stack {
 	stack := awscdk.NewStack(scope, &id, props)
 
+	// Every IAM role in this stack carries the boundary created by
+	// scripts/bootstrap-cdk.sh; the CloudFormation execution policy refuses to
+	// create or grant permissions to a role without it.
+	awsiam.PermissionsBoundary_Of(stack).Apply(
+		awsiam.ManagedPolicy_FromManagedPolicyName(stack, jsii.String("RoleBoundary"), jsii.String("SkylightMcpRoleBoundary")))
+
+	// Optional and transitional: only used to keep the original Cognito user
+	// resource (retained) until it is dropped from the template. New users are
+	// created by scripts/create-cognito-user.sh, so synth needs no email.
 	userEmail := ctxString(stack, "userEmail")
-	if userEmail == "" {
-		panic("missing context: pass -c userEmail=<address>")
-	}
 	allowedSub := ctxString(stack, "allowedSub")
 
 	// ---- Cognito: one user, no self-signup, password + TOTP MFA ----------
@@ -70,38 +80,73 @@ func NewSkylightStack(scope constructs.Construct, id string, props *awscdk.Stack
 
 	// The hosted-UI domain prefix must be unique in the region; derive it from
 	// the account so it is stable and nothing identifying is committed.
-	sum := sha256.Sum256([]byte(os.Getenv("CDK_DEFAULT_ACCOUNT") + "skylight-mcp"))
+	// A wrong or empty account would silently change the prefix and replace
+	// the domain, so refuse to synthesise without one.
+	acct := os.Getenv("CDK_DEFAULT_ACCOUNT")
+	if acct == "" {
+		panic("CDK_DEFAULT_ACCOUNT is empty; use scripts/deploy.sh, or a dummy account for an offline synth")
+	}
+	sum := sha256.Sum256([]byte(acct + "skylight-mcp"))
 	domain := pool.AddDomain(jsii.String("Domain"), &awscognito.UserPoolDomainOptions{
 		CognitoDomain: &awscognito.CognitoDomainOptions{
 			DomainPrefix: jsii.String("skylight-mcp-" + hex.EncodeToString(sum[:])[:10]),
 		},
 	})
 
-	client := pool.AddClient(jsii.String("ConnectorClient"), &awscognito.UserPoolClientOptions{
+	// One custom scope for this server. No OpenID scopes: no ID token is
+	// issued, so nothing contradicts the issuer the server advertises.
+	invoke := awscognito.NewResourceServerScope(&awscognito.ResourceServerScopeProps{
+		ScopeName:        jsii.String(scopeName),
+		ScopeDescription: jsii.String("Call the skylight-mcp tools"),
+	})
+	resourceServer := pool.AddResourceServer(jsii.String("ResourceServer"), &awscognito.UserPoolResourceServerOptions{
+		Identifier: jsii.String(resourceServerID),
+		Scopes:     &[]awscognito.ResourceServerScope{invoke},
+	})
+
+	// "V2": a new logical id replaces the Step 0 client, giving a fresh client
+	// id and secret (the old secret appeared in a session transcript).
+	client := pool.AddClient(jsii.String("ConnectorClientV2"), &awscognito.UserPoolClientOptions{
 		UserPoolClientName: jsii.String("claude-connector"),
 		GenerateSecret:     jsii.Bool(true),
 		OAuth: &awscognito.OAuthSettings{
 			Flows:        &awscognito.OAuthFlows{AuthorizationCodeGrant: jsii.Bool(true)},
-			Scopes:       &[]awscognito.OAuthScope{awscognito.OAuthScope_OPENID(), awscognito.OAuthScope_EMAIL()},
+			Scopes:       &[]awscognito.OAuthScope{awscognito.OAuthScope_ResourceServer(resourceServer, invoke)},
 			CallbackUrls: &callbackURLs,
 		},
 		SupportedIdentityProviders: &[]awscognito.UserPoolClientIdentityProvider{awscognito.UserPoolClientIdentityProvider_COGNITO()},
 		AccessTokenValidity:        awscdk.Duration_Hours(jsii.Number(1)),
 		IdTokenValidity:            awscdk.Duration_Hours(jsii.Number(1)),
-		RefreshTokenValidity:       awscdk.Duration_Days(jsii.Number(30)),
+		RefreshTokenValidity:       awscdk.Duration_Days(jsii.Number(365)),
 		EnableTokenRevocation:      jsii.Bool(true),
 		PreventUserExistenceErrors: jsii.Bool(true),
 	})
-
-	awscognito.NewCfnUserPoolUser(stack, jsii.String("TheUser"), &awscognito.CfnUserPoolUserProps{
-		UserPoolId:             pool.UserPoolId(),
-		Username:               jsii.String(userEmail),
-		DesiredDeliveryMediums: &[]*string{jsii.String("EMAIL")},
-		UserAttributes: &[]*awscognito.CfnUserPoolUser_AttributeTypeProperty{
-			{Name: jsii.String("email"), Value: jsii.String(userEmail)},
-			{Name: jsii.String("email_verified"), Value: jsii.String("true")},
-		},
+	cfnClient := client.Node().DefaultChild().(awscognito.CfnUserPoolClient)
+	// Only the hosted-UI OAuth flow is used; disable direct SRP/password/custom
+	// sign-in through this client (Cognito's defaults otherwise). The list is
+	// empty because Cognito rejects ALLOW_REFRESH_TOKEN_AUTH when refresh-token
+	// rotation is enabled; rotation has its own refresh path.
+	cfnClient.AddPropertyOverride(jsii.String("ExplicitAuthFlows"), []string{})
+	// Rotate refresh tokens on use (Essentials tier), so an active connector
+	// keeps renewing instead of hitting a fixed-lifetime cliff.
+	cfnClient.AddPropertyOverride(jsii.String("RefreshTokenRotation"), map[string]any{
+		"Feature": "ENABLED", "RetryGracePeriodSeconds": 60,
 	})
+
+	if userEmail != "" {
+		// Transitional: the Step 0 user, retained so that dropping it from the
+		// template (by deploying without -c userEmail) does not delete it.
+		u := awscognito.NewCfnUserPoolUser(stack, jsii.String("TheUser"), &awscognito.CfnUserPoolUserProps{
+			UserPoolId:             pool.UserPoolId(),
+			Username:               jsii.String(userEmail),
+			DesiredDeliveryMediums: &[]*string{jsii.String("EMAIL")},
+			UserAttributes: &[]*awscognito.CfnUserPoolUser_AttributeTypeProperty{
+				{Name: jsii.String("email"), Value: jsii.String(userEmail)},
+				{Name: jsii.String("email_verified"), Value: jsii.String("true")},
+			},
+		})
+		u.ApplyRemovalPolicy(awscdk.RemovalPolicy_RETAIN, nil)
+	}
 
 	issuer := fmt.Sprintf("https://cognito-idp.%s.amazonaws.com/%s", region, *pool.UserPoolId())
 
@@ -123,6 +168,7 @@ func NewSkylightStack(scope constructs.Construct, id string, props *awscdk.Stack
 	env := map[string]*string{
 		"AUTH_ISSUER":    jsii.String(issuer),
 		"AUTH_CLIENT_ID": client.UserPoolClientId(),
+		"AUTH_SCOPE":     jsii.String(resourceServerID + "/" + scopeName),
 		// Cognito hosted-UI endpoints, advertised in the metadata the server serves.
 		"AUTH_AUTHORIZE_URL": jsii.String(*domain.BaseUrl(nil) + "/oauth2/authorize"),
 		"AUTH_TOKEN_URL":     jsii.String(*domain.BaseUrl(nil) + "/oauth2/token"),
@@ -139,8 +185,10 @@ func NewSkylightStack(scope constructs.Construct, id string, props *awscdk.Stack
 		Role:         role,
 		LogGroup:     logGroup,
 		MemorySize:   jsii.Number(256),
-		Timeout:      awscdk.Duration_Seconds(jsii.Number(10)),
-		Environment:  &env,
+		// Just under API Gateway's 30 s integration limit, leaving room for the
+		// Skylight token refresh, its commit, and the API call (see PLAN §4).
+		Timeout:     awscdk.Duration_Seconds(jsii.Number(28)),
+		Environment: &env,
 	})
 	alias := awslambda.NewAlias(stack, jsii.String("LiveAlias"), &awslambda.AliasProps{
 		AliasName: jsii.String("live"),
@@ -151,10 +199,17 @@ func NewSkylightStack(scope constructs.Construct, id string, props *awscdk.Stack
 	api := awsapigatewayv2.NewHttpApi(stack, jsii.String("Api"), &awsapigatewayv2.HttpApiProps{
 		ApiName: jsii.String("skylight-mcp"),
 	})
+	connectorURL := jsii.String(*api.ApiEndpoint() + "/mcp")
+	// claude.ai sends RFC 8707 "resource" = the connector URL, so Cognito binds
+	// access tokens to it ("aud"). The Lambda requires that exact audience
+	// whenever "aud" is present.
+	fn.AddEnvironment(jsii.String("AUTH_AUDIENCE"), connectorURL, nil)
 	integration := awsapigatewayv2integrations.NewHttpLambdaIntegration(jsii.String("Integration"), alias, nil)
 	jwt := awsapigatewayv2authorizers.NewHttpJwtAuthorizer(jsii.String("Jwt"), jsii.String(issuer),
 		&awsapigatewayv2authorizers.HttpJwtAuthorizerProps{
-			JwtAudience:    &[]*string{client.UserPoolClientId()},
+			// API Gateway checks "aud" when present, else "client_id". Resource-
+			// bound tokens carry aud = connector URL; unbound ones only client_id.
+			JwtAudience:    &[]*string{connectorURL, client.UserPoolClientId()},
 			IdentitySource: &[]*string{jsii.String("$request.header.Authorization")},
 		})
 	// The MCP endpoint requires a valid token. GET/DELETE are routed too so the
@@ -168,26 +223,37 @@ func NewSkylightStack(scope constructs.Construct, id string, props *awscdk.Stack
 		Authorizer:  jwt,
 	})
 	// OAuth discovery must be reachable without a token.
-	for _, p := range []string{
+	discovery := []string{
 		"/.well-known/oauth-protected-resource",
 		"/.well-known/oauth-protected-resource/mcp",
 		"/.well-known/oauth-authorization-server",
 		"/.well-known/oauth-authorization-server/mcp",
-		"/.well-known/openid-configuration",
-		"/.well-known/openid-configuration/mcp",
-	} {
-		api.AddRoutes(&awsapigatewayv2.AddRoutesOptions{
+	}
+	var discoveryRoutes []awsapigatewayv2.HttpRoute
+	for _, p := range discovery {
+		discoveryRoutes = append(discoveryRoutes, *api.AddRoutes(&awsapigatewayv2.AddRoutesOptions{
 			Path:        jsii.String(p),
 			Methods:     &[]awsapigatewayv2.HttpMethod{awsapigatewayv2.HttpMethod_GET},
 			Integration: integration,
-		})
+		})...)
 	}
-	// Single-user service: a low ceiling costs nothing and blunts abuse.
+	// Single-user service: a low ceiling costs nothing and blunts abuse. The
+	// unauthenticated discovery routes get an even lower one, because each
+	// request invokes the Lambda (account concurrency limit is 10).
 	stage := api.DefaultStage().Node().DefaultChild().(awsapigatewayv2.CfnStage)
 	stage.SetDefaultRouteSettings(&awsapigatewayv2.CfnStage_RouteSettingsProperty{
 		ThrottlingRateLimit:  jsii.Number(5),
 		ThrottlingBurstLimit: jsii.Number(10),
 	})
+	perRoute := map[string]any{}
+	for _, p := range discovery {
+		perRoute["GET "+p] = map[string]any{"ThrottlingRateLimit": 1, "ThrottlingBurstLimit": 2}
+	}
+	stage.AddPropertyOverride(jsii.String("RouteSettings"), perRoute)
+	// Route settings name routes by key, so the routes must exist first.
+	for _, r := range discoveryRoutes {
+		stage.Node().AddDependency(r)
+	}
 	// Gateway-level access log, so requests the gateway answers itself (404s,
 	// authorizer 401s) are visible. Method, path, status and latency only: no
 	// headers, query strings, IPs or tokens.

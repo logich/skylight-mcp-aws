@@ -1,0 +1,143 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "Lambda",
+      "Effect": "Allow",
+      "Action": "lambda:*",
+      "Resource": [
+        "arn:aws:lambda:us-east-2:${ACCOUNT}:function:skylight-mcp*"
+      ]
+    },
+    {
+      "Sid": "ApiGateway",
+      "Effect": "Allow",
+      "Action": "apigateway:*",
+      "Resource": "arn:aws:apigateway:us-east-2::/*"
+    },
+    {
+      "Sid": "Cognito",
+      "Effect": "Allow",
+      "Action": "cognito-idp:*",
+      "Resource": "*",
+      "Condition": { "StringEquals": { "aws:RequestedRegion": "us-east-2" } }
+    },
+    {
+      "Sid": "LogGroups",
+      "Effect": "Allow",
+      "Action": "logs:*",
+      "Resource": [
+        "arn:aws:logs:us-east-2:${ACCOUNT}:log-group:/aws/lambda/skylight-mcp*",
+        "arn:aws:logs:us-east-2:${ACCOUNT}:log-group:/aws/apigateway/skylight-mcp*"
+      ]
+    },
+    {
+      "Sid": "LogDeliveryForApiAccessLogs",
+      "Effect": "Allow",
+      "Action": [
+        "logs:DescribeLogGroups",
+        "logs:CreateLogDelivery",
+        "logs:GetLogDelivery",
+        "logs:UpdateLogDelivery",
+        "logs:DeleteLogDelivery",
+        "logs:ListLogDeliveries",
+        "logs:PutResourcePolicy",
+        "logs:DescribeResourcePolicies"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "DynamoDB",
+      "Effect": "Allow",
+      "Action": "dynamodb:*",
+      "Resource": "arn:aws:dynamodb:us-east-2:${ACCOUNT}:table/SkylightMcp*"
+    },
+    {
+      "Sid": "KmsKeyManagementNoDataAccess",
+      "Effect": "Allow",
+      "Action": [
+        "kms:CreateKey",
+        "kms:DescribeKey",
+        "kms:GetKeyPolicy",
+        "kms:PutKeyPolicy",
+        "kms:EnableKeyRotation",
+        "kms:GetKeyRotationStatus",
+        "kms:ScheduleKeyDeletion",
+        "kms:TagResource",
+        "kms:UntagResource",
+        "kms:ListResourceTags",
+        "kms:CreateAlias",
+        "kms:UpdateAlias",
+        "kms:DeleteAlias",
+        "kms:ListAliases"
+      ],
+      "Resource": "*",
+      "Condition": { "StringEquals": { "aws:RequestedRegion": "us-east-2" } }
+    },
+    {
+      "Sid": "SchedulerSnsAlarmsCodeDeploy",
+      "Effect": "Allow",
+      "Action": ["scheduler:*", "sns:*", "cloudwatch:*", "codedeploy:*"],
+      "Resource": [
+        "arn:aws:scheduler:us-east-2:${ACCOUNT}:schedule/*/SkylightMcp*",
+        "arn:aws:scheduler:us-east-2:${ACCOUNT}:schedule-group/*",
+        "arn:aws:sns:us-east-2:${ACCOUNT}:SkylightMcp*",
+        "arn:aws:cloudwatch:us-east-2:${ACCOUNT}:alarm:SkylightMcp*",
+        "arn:aws:codedeploy:us-east-2:${ACCOUNT}:application:SkylightMcp*",
+        "arn:aws:codedeploy:us-east-2:${ACCOUNT}:deploymentgroup:SkylightMcp*",
+        "arn:aws:codedeploy:us-east-2:${ACCOUNT}:deploymentconfig:*"
+      ]
+    },
+    {
+      "Sid": "Budgets",
+      "Effect": "Allow",
+      "Action": ["budgets:*"],
+      "Resource": "arn:aws:budgets::${ACCOUNT}:budget/SkylightMcp*"
+    },
+    {
+      "Sid": "IamRolesCreateOrGrantOnlyWithBoundary",
+      "Effect": "Allow",
+      "Action": [
+        "iam:CreateRole",
+        "iam:PutRolePolicy",
+        "iam:AttachRolePolicy",
+        "iam:PutRolePermissionsBoundary"
+      ],
+      "Resource": "arn:aws:iam::${ACCOUNT}:role/SkylightMcp-*",
+      "Condition": {
+        "StringEquals": {
+          "iam:PermissionsBoundary": "arn:aws:iam::${ACCOUNT}:policy/SkylightMcpRoleBoundary"
+        }
+      }
+    },
+    {
+      "Sid": "IamRolesManageOwn",
+      "Effect": "Allow",
+      "Action": [
+        "iam:GetRole",
+        "iam:GetRolePolicy",
+        "iam:ListRolePolicies",
+        "iam:ListAttachedRolePolicies",
+        "iam:UpdateRole",
+        "iam:UpdateRoleDescription",
+        "iam:UpdateAssumeRolePolicy",
+        "iam:TagRole",
+        "iam:UntagRole",
+        "iam:DeleteRolePolicy",
+        "iam:DetachRolePolicy",
+        "iam:DeleteRole",
+        "iam:PassRole"
+      ],
+      "Resource": "arn:aws:iam::${ACCOUNT}:role/SkylightMcp-*"
+    },
+    {
+      "Sid": "CdkBootstrapVersionAndAssets",
+      "Effect": "Allow",
+      "Action": ["ssm:GetParameters", "ssm:GetParameter", "s3:GetObject"],
+      "Resource": [
+        "arn:aws:ssm:us-east-2:${ACCOUNT}:parameter/cdk-bootstrap/hnb659fds/version",
+        "arn:aws:s3:::cdk-hnb659fds-assets-${ACCOUNT}-us-east-2/*"
+      ]
+    }
+  ]
+}

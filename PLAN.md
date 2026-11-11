@@ -37,54 +37,60 @@ Lessons, now baked into the code:
 - `cdk bootstrap` runs the app, so scripts pass a placeholder `userEmail`. Bootstrap used the default `AdministratorAccess` CloudFormation execution policy, so the deploy user can effectively deploy anything via CDK; tighten later.
 - Operational scripts: `scripts/bootstrap-cdk.sh` (admin, once), `deploy.sh` (needs `SKYLIGHT_USER_EMAIL`, `SKYLIGHT_ALLOWED_SUB`), `get-sub.sh`, `show-client-secret.sh`, `create-deploy-user.sh`.
 
-## 3. v1 build (after you confirm `hello` works)
+> **Revised 2026-11-11** after the Step 0 retrospective ([docs/RETRO-step0.md](docs/RETRO-step0.md)); you accepted all six of its decisions. §3–§6 below are the revised plan.
 
-- **Token store:** secret `{refresh_token, device_fingerprint, frame_id}` in Secrets Manager. Access token cached in memory across warm invocations; refresh on 401, once.
-- **Rotation safety (changed from my earlier proposal):** reserved concurrency of 1 is **not possible** because the account's Lambda limit is 10 and AWS requires 10 unreserved. Instead: a **DynamoDB lease** (one item, conditional put with ~15 s TTL, on-demand, pennies). The invocation that wins the lease refreshes, writes the new refresh token to Secrets Manager *before using it*, then releases. Losers wait briefly, re-read the secret, and use the fresh token. If refresh is rejected, re-read the secret once in case someone else just rotated, then fail with a clear "re-authorise Skylight" error. This is a few hundred lines of carefully tested code; worth it because a double refresh could burn the grant.
-- **Tools:** `list_family_members`, `list_events`, `get_event` exactly as in the spec, with names not ids, drop non-member categories, `get_event(event_id, start?, end?)` unless a live probe finds a real single-event endpoint.
-- **Robustness:** timeouts on every outbound call, `Retry-After` plus capped jittered backoff, strict parsers that return "upstream API changed" (never partial data, never silently skipped events).
-- **Logging:** `log/slog` JSON through an allowlist of fields; tokens, credentials and event content are not loggable by construction (typed fields, no raw bodies).
-- **Tests (all offline in CI):** `httptest` replay of scrubbed fixtures; MCP contract tests with golden files; fuzz targets on every parser; exhaustive auth table tests (missing, malformed, expired, wrong issuer/client/`token_use`, wrong `sub`, `alg=none`, etc.).
-- **Live canary:** see §5.
+## 3. Auth hardening (done before any Skylight code)
 
-## 4. Dependencies (each justified in DEPENDENCIES.md)
+- **CDK re-bootstrap** with a scoped CloudFormation execution policy (only the services this stack uses; IAM limited to roles named `SkylightMcp-*`) and a permissions boundary on created roles. Removes the `AdministratorAccess` takeover path.
+- **In-Lambda JWT verification:** the Lambda verifies the RS256 signature of the `Authorization` bearer token itself against Cognito's JWKS (fetched once per cold start, stdlib `crypto/rsa`), and only then runs the claims check. Claims passed in the event by API Gateway are no longer trusted, which closes the forged-claims-by-direct-invoke path. The gateway authorizer stays as the first layer.
+- **Cognito:** resource server with one custom scope `skylight-mcp/invoke`; no `openid`/`email` scopes (no ID token, so no issuer contradiction); the OIDC discovery routes are removed; `Authorize` requires the scope; client auth flows restricted to refresh only; new app client (fresh id and secret, replacing the one exposed in a transcript); refresh token validity raised to the maximum practical value, with rotation if the pool tier supports it.
+- **Cognito user moved out of the CDK template** (created once by script), so synth needs no email and CI logs can't leak it.
+- **Scripted OAuth smoke test** run before every connector test: 401 → protected-resource document → authorization-server metadata → authorize redirect → `/mcp` 401 for missing, garbage and tampered tokens.
+
+## 4. v1 build
+
+- **Token store:** one DynamoDB item, encrypted with a customer-managed KMS key, holding `{refresh_token, access_token, access_expires_at, device_fingerprint, frame_id, generation, lease_owner, lease_expires_at}`. Strongly consistent reads. Secrets Manager is not used for rotating tokens (AWS advises against frequent `PutSecretValue`, and it has no compare-and-set).
+- **Persist the access token** (HA does), so cold starts reuse it instead of each spending a refresh.
+- **Refresh protocol:** acquire the lease with a conditional write on `lease_expires_at`; re-read; if `generation` moved, use the stored token; else refresh with a short deadline (≤4 s), then commit new tokens, bump `generation` and release the lease in **one** conditional `UpdateItem`; retry the commit until the Lambda's own deadline. Never resend a refresh token that has already been sent. Handle both "rotates" and "doesn't rotate" responses. Losers wait and re-read. A rejected refresh means "re-authorise Skylight", with a clear error.
+- **Timeouts:** Lambda timeout ~28 s (HTTP API caps at 30 s); lease TTL = token deadline + commit + margin, below the Lambda timeout.
+- **Tools:** `list_family_members`, `list_events`, `get_event(event_id, start?, end?)` as specified; names not ids; drop non-member categories; fail with "upstream API changed" when an event references a category missing from `included`.
+- **Robustness, logging, tests:** as before (timeouts, `Retry-After` + jittered backoff, strict parsers, allowlisted slog fields; fixture replay, MCP golden files, fuzzing), plus token-level auth tests with locally generated RSA keys (tampered payload, wrong `kid`, `alg=none`, HS256, expired, wrong pool).
+
+## 5. Dependencies (each justified in DEPENDENCIES.md)
 
 | Module | Why |
 |---|---|
 | `modelcontextprotocol/go-sdk` | spec requires the official SDK |
-| `aws/aws-lambda-go` | Lambda runtime loop; hand-rolling is not worth it |
-| `aws-sdk-go-v2` service modules for Secrets Manager + DynamoDB only | SigV4 signing is security-critical; I would rather import it than write it. Alternative is ~100 lines of hand-rolled SigV4 for 3 API calls; your call (see questions). |
-| JWT: none | The authorizer does signature checks; my function only validates claims. Decision to revisit: if we also verify signatures in-Lambda, `golang-jwt` or stdlib `crypto` + JWKS fetch. I propose in-Lambda signature verification is skipped because API Gateway already does it and the function is meant to stay tiny. |
+| `aws/aws-lambda-go` | Lambda runtime loop and event types |
+| `aws-sdk-go-v2` DynamoDB (+ core) | SigV4 signing is security-critical; import rather than hand-roll. KMS encryption is server-side, so no KMS client is needed. |
+| JWT: none | RS256 verification of a single key type with stdlib `crypto/rsa`, `crypto/sha256`, `encoding/json`, `encoding/base64`; small enough to test exhaustively. |
 
-Everything else stdlib. `infra/` has its own `go.mod` (CDK, constructs).
+## 6. Canary, CI/CD and hardening
 
-## 5. Canary (small deviation from what you chose)
-
-You picked "GitHub Actions schedule + email". A canary that uses its own copy of the Skylight refresh token would fight the Lambda's rotating token chain, and would put a Skylight credential in GitHub. Instead: the daily workflow assumes an **OIDC role** that can invoke only this function with a `{"canary":true}` payload; the Lambda does a real read through the normal token path and returns pass/fail. Failure makes the workflow red and GitHub emails you. Same alerting you asked for, but no Skylight secret outside AWS.
-
-## 6. CI/CD and hardening
-
-- Dependabot for `gomod` (both modules) and GitHub Actions.
-- PR checks: `go vet`, `govulncheck`, tests incl. short fuzz, `cdk synth`.
-- Merge to main: build arm64 binary, `cdk deploy` via GitHub OIDC role (no long-lived keys in GitHub), new Lambda version → test alias → smoke test → CodeDeploy linear/canary traffic shift with CloudWatch-alarm rollback.
-- Least-privilege Lambda role: `GetSecretValue`/`PutSecretValue` on its own secret, read/write its one DynamoDB table, own log group only.
-- **Amazon Inspector:** currently `DISABLED` for Lambda in this account. Enabling it is account-wide (affects your other projects' functions and adds cost), so I need your OK. I also have to confirm Inspector's Lambda scanning actually covers Go modules in a `provided.al2023` function; I do not want to claim coverage I have not verified.
+- **Canary inside AWS:** EventBridge Scheduler invokes the function daily with a canary event (a separate, non-API-Gateway entry point that cannot reach the MCP tools); a CloudWatch alarm on canary failure emails you via SNS. Shares the token store and lease, so it can't race user requests. No Skylight credential or AWS invoke role in GitHub.
+- **Deploy:** publish a new Lambda version; a CodeDeploy **pre-traffic hook** runs synthetic smoke tests against that version; shift **all at once**; post-traffic check; automatic rollback if a hook fails or the error alarm fires; one-command manual rollback.
+- **GitHub OIDC roles** written against the real `sub` formats (`repo:…:environment:production` for the deploy job), deploy job in a protected environment.
+- **CI:** root `go vet ./...`, `gofmt -l cmd internal`, `govulncheck ./...` and `-mode=binary`; infra `go vet .`; tests with short fuzz; `cdk synth` with a dummy account and no credentials; CodeQL; dependency review; secret-pattern scan. Node 24 pinned; Dependabot groups `aws-cdk` (npm) with `awscdk/v2` (gomod).
+- **Throttling:** ~1 rps on unauthenticated `.well-known` routes; AWS Budget alarm.
+- **Inspector:** enabled, but Go coverage in `provided.al2023` is undocumented; confirm via its coverage API after deploy and treat `govulncheck` as the real control.
 
 ## 7. Milestones (stop for your confirmation at the starred ones)
 
-1. ★ Step 0 stub deployed; you test `hello`.
-2. `skylight-login` tool; you authorise once; a few read-only live calls from your machine to settle the unknowns in SKYLIGHT_API.md §6, then scrub into fixtures.
-3. Skylight client + token store + lease, with tests.
-4. Three tools + contract/fuzz/auth tests.
-5. CI, auto-deploy, alias/rollback, canary, Dependabot, Inspector.
-6. ★ v1 done end to end. Only then v2 (write tools behind an off-by-default flag, not registered otherwise).
+1. ★ Step 0 stub deployed; you test `hello`. **Done.**
+2. ★ Auth hardening (§3); you reconnect the connector once. **Deployed 2026-11-11** (scoped bootstrap + boundary, in-Lambda RS256 verification, custom scope, rotating 365-day refresh tokens, new client, user out of the template, discovery throttles, 28 s timeout); `scripts/smoke-oauth.sh` passes. **Done:** reconnected and `hello` called successfully with in-Lambda verification of real, resource-bound tokens (aud = connector URL, accepted by both gateway and Lambda).
+3. `skylight-login` tool (accepts a pasted URL or bare code, exchanges immediately; also imports a refresh token); you authorise once; read-only live calls **from the laptop and from a Lambda** to settle: token response shape and rotation, `expires_in`, old-token reuse behaviour, parallel-refresh behaviour, datacenter-IP blocking, required headers, refresh-token idle expiry, plus the API unknowns in SKYLIGHT_API.md §6. Scrub into fixtures.
+4. Token store + lease + Skylight client, with tests.
+5. Three tools + contract/fuzz tests.
+6. CI, deploy pipeline, canary, Dependabot, Inspector check.
+7. ★ v1 done end to end. Only then v2 (write tools behind an off-by-default flag, not registered otherwise).
 
 ## 8. Decisions (settled)
 
-1. Rotation lock: DynamoDB lease.
-2. AWS SDK v2 (Secrets Manager + DynamoDB modules only) rather than hand-rolled SigV4.
+1. Rotation lock: DynamoDB lease, in the same item as the tokens (revised).
+2. AWS SDK v2 (DynamoDB only) rather than hand-rolled SigV4 (revised: no Secrets Manager).
 3. Inspector: Lambda standard scanning enabled in us-east-2 on 2026-11-11 (code scanning left off). Still to verify it covers Go in `provided.al2023`.
-4. Canary: Lambda-invoked via GitHub OIDC role (§5).
+4. Canary: EventBridge Scheduler inside AWS, SNS email alert (revised; replaces the GitHub-invoked canary).
+4a. Retrospective decisions accepted 2026-11-11: in-Lambda JWT verification; DynamoDB token store; in-AWS canary; pre-traffic hook + all-at-once deploy; Cognito custom scope, refresh lifetime and new client; scoped CDK bootstrap.
 5. Repo: `https://github.com/logich/skylight-mcp-aws` (created by you, empty, **public by decision**, and SPEC.md §9 now says so). Remote `origin` added locally; nothing pushed yet. Observed on 2026-11-11: secret scanning and push protection already enabled; Dependabot security updates disabled (to enable during CI setup). You confirmed GitHub Free and Copilot Free; everything this project needs from GitHub (Actions, OIDC, environments, branch protection, secret scanning, CodeQL, dependency review, Dependabot) is available on a public repo at that tier. CI adds CodeQL and dependency review.
    Public-repo rules: no credentials, no AWS account ID in committed files, scrubbed fixtures only, OIDC trust limited to `main`, deploy jobs in a protected environment.
 6. Cognito user: your own email address (passed at deploy time via CDK context, never committed because the repo is public), password + TOTP MFA. The allowlisted Cognito `sub` is likewise passed at deploy time.

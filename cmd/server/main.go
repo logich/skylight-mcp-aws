@@ -2,8 +2,14 @@
 package main
 
 import (
+	"context"
+	"errors"
+	"fmt"
+	"io"
 	"log/slog"
+	"net/http"
 	"os"
+	"time"
 
 	"github.com/aws/aws-lambda-go/lambda"
 
@@ -17,14 +23,21 @@ var version = "dev"
 
 func main() {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
+	issuer := os.Getenv("AUTH_ISSUER")
 
-	// Missing configuration is not fatal: auth.Authorize fails closed, so every
-	// MCP request is rejected until it is set.
+	// Missing configuration is not fatal: auth fails closed, so every MCP
+	// request is rejected until it is set.
 	h := server.New(server.Options{
 		Auth: auth.Config{
-			Issuer:     os.Getenv("AUTH_ISSUER"),
+			Issuer:     issuer,
 			ClientID:   os.Getenv("AUTH_CLIENT_ID"),
 			AllowedSub: os.Getenv("AUTH_ALLOWED_SUB"),
+			Scope:      os.Getenv("AUTH_SCOPE"),
+			Audience:   os.Getenv("AUTH_AUDIENCE"),
+		},
+		Keys: &auth.KeySet{
+			Fetch:      jwksFetcher(issuer),
+			MinRefresh: 30 * time.Second,
 		},
 		AuthorizeURL: os.Getenv("AUTH_AUTHORIZE_URL"),
 		TokenURL:     os.Getenv("AUTH_TOKEN_URL"),
@@ -32,4 +45,27 @@ func main() {
 		Logger:       logger,
 	})
 	lambda.Start(lambdahttp.Handler(h))
+}
+
+// jwksFetcher returns a fetcher for the pool's published signing keys.
+func jwksFetcher(issuer string) func(context.Context) ([]byte, error) {
+	client := &http.Client{Timeout: 5 * time.Second}
+	return func(ctx context.Context) ([]byte, error) {
+		if issuer == "" {
+			return nil, errors.New("no issuer configured")
+		}
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, issuer+"/.well-known/jwks.json", nil)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := client.Do(req)
+		if err != nil {
+			return nil, err
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			return nil, fmt.Errorf("jwks: status %d", resp.StatusCode)
+		}
+		return io.ReadAll(io.LimitReader(resp.Body, 64<<10))
+	}
 }

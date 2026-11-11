@@ -56,8 +56,8 @@ Later and out of scope for now: chores, lists, tasks.
 ## 5. AWS hosting
 
 - **Compute:** Lambda on the OS-only runtime (`provided.al2023`, arm64) behind API Gateway (HTTP API).
-- **Secrets:** Skylight credentials and refresh token in Secrets Manager. Never in environment variables, code or logs.
-- **IAM:** least privilege. The function may read only its own secret and write only its own logs.
+- **Secrets:** Skylight tokens (refresh token, access token, device fingerprint) in a single DynamoDB item encrypted with a customer-managed KMS key, updated only through conditional writes. Never in environment variables, code or logs. (Revised 2026-11-11: originally Secrets Manager, which suits rarely-changing secrets but not a token that rotates on use and needs compare-and-set.)
+- **IAM:** least privilege. The function may read and write only its own token table, use only its own KMS key, and write only its own logs. The CDK bootstrap uses a scoped CloudFormation execution policy and a permissions boundary, never `AdministratorAccess`.
 - **Logging:** CloudWatch with structured logs that never contain tokens, credentials or event content.
 - **Infrastructure as code:** CDK or Terraform. Pick one and explain why in the plan.
 
@@ -66,6 +66,8 @@ Later and out of scope for now: chores, lists, tasks.
 - Claude custom connectors authenticate with OAuth. Put the endpoint behind OAuth 2.1 (Cognito is acceptable).
 - Lock access to my account alone. Any other identity is rejected.
 - The authorization check is a single, small function, simple enough to reason about fully, and exhaustively tested (see §8).
+- The function verifies the bearer token's signature itself (against Cognito's published keys), in addition to any API Gateway authorizer. Identity claims supplied in the invocation event are never trusted, so invoking the function directly cannot impersonate the user.
+- Tokens carry a dedicated scope for this server, and the check requires it.
 
 ## 7. Robustness
 
@@ -81,11 +83,11 @@ All tests run in CI with no live Skylight calls:
 1. **Recorded API tests:** an `httptest` server replays scrubbed Skylight responses (fixtures committed, with personal data replaced).
 2. **MCP contract tests:** call every tool through an MCP client and compare output to golden files, so an SDK update cannot silently change what Claude sees.
 3. **Fuzz tests:** Go native fuzzing on every response parser. Parsers must never panic.
-4. **Auth tests:** prove the authorization check rejects every identity except mine, including missing, expired and malformed tokens.
+4. **Auth tests:** prove the authorization check rejects every identity except mine, including missing, expired and malformed tokens, bad signatures, unknown keys, `alg=none` and other algorithms, wrong issuer, client or scope.
 
 Separately, outside CI:
 
-5. **Daily live canary:** a scheduled check against the real Skylight API that alerts me if it starts failing. This catches Skylight changing its API.
+5. **Daily live canary:** a scheduled check inside AWS against the real Skylight API that emails me (via SNS) if it starts failing. This catches Skylight changing its API. It uses the server's own token store and cannot reach the MCP tools.
 
 ## 9. Updates and deployment
 
@@ -94,7 +96,8 @@ Separately, outside CI:
 - Dependabot or Renovate opens PRs for Go and module updates.
 - CI runs `go vet`, `govulncheck` and all tests on every PR.
 - Merging to main builds and deploys automatically.
-- Deploy to a test alias, run smoke tests, then shift traffic gradually with automatic rollback on errors.
+- Publish a new function version, run smoke tests against it in a pre-traffic hook, then shift all traffic at once, with automatic rollback if a hook fails or the error alarm fires. (Revised 2026-11-11: gradual shifting has no signal at single-user traffic.)
+- `cdk synth` in CI needs no real account, credentials or personal values, so pull-request logs leak nothing.
 - Enable Amazon Inspector scanning for the function.
 
 ## 10. Working agreement

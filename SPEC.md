@@ -65,7 +65,7 @@ Later and out of scope for now: chores, lists, tasks.
 
 - Claude custom connectors authenticate with OAuth. Put the endpoint behind OAuth 2.1 (Cognito is acceptable).
 - Lock access to my account alone. Any other identity is rejected.
-- The authorization check is a single, small function, simple enough to reason about fully, and exhaustively tested (see §8).
+- The authorization check is a small package with one entry point (`auth.Check`), simple enough to reason about fully, and exhaustively tested and fuzzed (see §8).
 - The function verifies the bearer token's signature itself (against Cognito's published keys), in addition to any API Gateway authorizer. Identity claims supplied in the invocation event are never trusted, so invoking the function directly cannot impersonate the user.
 - Tokens carry a dedicated scope for this server, and the check requires it.
 

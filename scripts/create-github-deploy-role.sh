@@ -6,6 +6,7 @@
 #   - role "skylight-mcp-github-deploy", assumable ONLY by a workflow job in
 #     logich/skylight-mcp-aws that runs in the "production" environment (whose
 #     required reviewer is the owner). Pull requests can never assume it.
+#     Re-running the script updates the trust policy (needs `gh` signed in).
 #   - an inline policy with the same reach as the skylight-deploy user (assume
 #     the CDK bootstrap roles, read the bootstrap version and stack status)
 #     plus invoking the live alias for the post-deploy canary.
@@ -21,6 +22,19 @@ QUALIFIER="hnb659fds"
 REGION="us-east-2"
 ACCOUNT="$(aws sts get-caller-identity --query Account --output text)"
 PROVIDER_ARN="arn:aws:iam::${ACCOUNT}:oidc-provider/token.actions.githubusercontent.com"
+
+# The subject the token will carry, as this repository is configured. With
+# GitHub's immutable subject claims (the default for this repo), it embeds the
+# owner and repository ids, e.g. repo:owner@123/name@456:environment:production,
+# so a renamed or re-created repository cannot inherit the role. Read it from
+# GitHub rather than assuming the name-based form (that mistake cost a run).
+SUB_PREFIX="$(gh api "repos/${REPO}/actions/oidc/customization/sub" --jq '
+  if .use_default != true then error("custom OIDC claim keys are not supported by this script")
+  elif .use_immutable_subject == true then .sub_claim_prefix
+  else "repo:" + "'"${REPO}"'" end')"
+case "$SUB_PREFIX" in repo:*) ;; *) echo "could not read the repository's OIDC subject format" >&2; exit 1 ;; esac
+SUBJECT="${SUB_PREFIX}:environment:${ENVIRONMENT}"
+echo "trusting subject: ${SUBJECT}"
 
 if ! aws iam get-open-id-connect-provider --open-id-connect-provider-arn "$PROVIDER_ARN" >/dev/null 2>&1; then
   # AWS validates GitHub's certificate chain itself; the thumbprint is required
@@ -41,7 +55,7 @@ TRUST="$(cat <<EOF
     "Condition": {
       "StringEquals": {
         "token.actions.githubusercontent.com:aud": "sts.amazonaws.com",
-        "token.actions.githubusercontent.com:sub": "repo:${REPO}:environment:${ENVIRONMENT}"
+        "token.actions.githubusercontent.com:sub": "${SUBJECT}"
       }
     }
   }]

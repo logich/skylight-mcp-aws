@@ -73,6 +73,37 @@ Three independent reviewers attacked (a) the Skylight token lifecycle, (b) conne
 - "Root `go vet ./...` crawls `infra/`" was my own claim, corrected: only `gofmt -l .` and `./...` *inside* `infra/` hit `node_modules`.
 - "Rotation is unproven" is technically right (no capture) but the HA author observed it; treat it as likely and design for both.
 
+## Part 3: the hardening cycle, reviewed adversarially (commit `a3fe016`)
+
+Cost of the cycle: 2 failed deploys (both rolled back cleanly), 1 wasted round trip for you (connector with no tools), 1 deploy-breaking trap avoided.
+
+### What the adversarial method got right
+
+- **Convergence is a strong signal.** Two of three independent reviewers found the forged-claims hole without seeing each other's work. It was the most serious issue and I had missed it.
+- **Verifying reviewer claims before acting paid off both ways.** Checking the live config confirmed the 30-day refresh cliff and the route-scoped invoke policy. Checking the HA code softened "rotation is unproven" to "likely, not captured". It also corrected one of my own claims (`go vet` and `infra/`).
+- **Findings became tests, not just fixes.** The forged-claims attack is now a permanent regression test, and the "test before handing over" lesson became `smoke-oauth.sh`.
+- **Checking before trusting caught a trap.** Reading the bootstrap template showed `--custom-permissions-boundary` attaches to the CloudFormation execution role itself, which would have broken every deploy.
+
+### What it got wrong, or what I did wrong with it
+
+1. **A reviewer's explicit warning went untested.** The auth reviewer wrote "if Cognito binds `resource` into `aud`, the gateway audience would mismatch". I noted it and moved on, and that is exactly what broke the connector. *Rule: every "if X then Y" from a reviewer becomes a test of X before you test.*
+2. **The same failure class recurred within a day.** Step 0's lesson was "run the client's flow before handing it over". I wrote the smoke test from my model of the client, not from what the client actually sends, so it missed the `resource` parameter. *Rule: build smoke checks from observed client traffic (gateway logs of a real connect), not from assumptions.*
+3. **The reviews covered the plan, not the code that followed.** The hardening code (`jwt.go`, the execution policy) was never reviewed adversarially. My own pass on it finds:
+   - **Execution policy is region-wide in places:** `apigateway:*`, `cognito-idp:*`, KMS key management including `PutKeyPolicy`, and `logs:PutResourcePolicy`. Verified today: nothing else exists in us-east-2, so this is latent. It becomes a real cross-project risk the day anything else is deployed there. *Fix: tag-based conditions (`aws:ResourceTag/project`, `aws:RequestTag/project`) and tagging the stack.*
+   - **Routine deploys use the admin session.** `deploy.sh` calls `get-sub.sh`, which needs it, every time, against the spirit of the narrow deploy user. *Fix: store the allowed `sub` once, e.g. as an SSM parameter the deploy user can read, or as deploy-time configuration in CI.*
+4. **"Deploy to find out" was used once where the docs would have answered.** The rotation and `ALLOW_REFRESH_TOKEN_AUTH` conflict cost a failed deploy. That was cheap here because it rolled back, but replacing Cognito resources is not always reversible (clients and secrets change, users can be lost). *Rule: for identity resources, read the constraints before deploying.*
+5. **The spec's "single, small function" is strained.** Real signature verification took the auth package to about 300 lines across three functions. That was the right trade (verifiable security over brevity), and it is exhaustively tested and fuzzed. But the spec wording no longer matches; it should say "a small package with one entry point (`auth.Check`)".
+6. **The authorized path can't be tested by machine.** Any machine identity strong enough to pass `Authorize` weakens "one user only". So every auth change costs you a reconnect. *Consequence: batch auth changes, and pre-verify everything else (unit tests with real-shaped tokens, smoke chain, log checks) so your round trip is the last check, not the first.*
+7. **Briefs shape reviews.** Each reviewer got my framing of the facts. None got the actual gateway logs of claude.ai's requests, which would have made the `aud` risk concrete. *Rule: give reviewers raw evidence (logs, captured responses), not just my summary.*
+8. **Built from an uncommitted tree.** The deployed build still reports `19400de-dirty`. *Rule: commit, then deploy, so the reported version maps to a commit.*
+
+### Process changes adopted (added to Part 1's list)
+
+5. Reviewer "if X then Y" warnings become explicit pre-test checks.
+6. Smoke tests are derived from observed real-client traffic.
+7. Adversarially review the *code* before your test, not only the plan.
+8. Commit before deploy.
+
 ## Decisions needed (they change SPEC.md)
 
 1. **Verify JWT signatures inside the Lambda** (stdlib RSA + cached Cognito JWKS), keeping the gateway authorizer as a first layer. Closes A1 and A9; reverses PLAN §4.

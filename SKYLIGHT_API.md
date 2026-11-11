@@ -146,6 +146,25 @@ Confirmed live on 2026-11-11 (first sign-in via `skylight-login`, one `GET /api/
 - Code exchange returns `access_token` and `refresh_token` (43 characters each) and an `expires_in` of 24 hours.
 - `GET /api/frames` with Bearer + `Skylight-Api-Version: 2026-05-01` → 200, JSON:API (`data`, `included`, `meta`), one frame. The response echoes `Skylight-Api-Version: 2026-05-01`, so a version change is detectable. Frame attributes include `household_name`, `name` **and `timezone`**, so the frame's own timezone is available for event windows.
 
+Probe results, 2026-11-11 (`cmd/skylight-probe`, laptop, read-only; raw responses in git-ignored `captures/`). Answers to the numbered unknowns below:
+
+| # | Answer |
+|---|---|
+| 1 | `GET /categories?include_profiles=true` → `data[]` of **type `category_detail`** (not `category`) with `label`, `color` (`#rrggbb`), `linked_to_profile`, `profile_picture_urls`, `selected_for_chore_chart`; relationships `family_member`, `avatar`, `hat`, `source_calendars`, `source_calendar_categorizations`; `included` holds `avatar`s. 17 categories, 11 with `linked_to_profile=true`, member labels non-empty and unique. Every category id referenced by an event exists here. |
+| 2 | **No single-event GET**: `GET .../calendar_events/{id}` → 404 for plain ids, composite ids and a recurring event's base id. |
+| 3 | Refresh **rotates every time** (new, different `refresh_token`); response fields `access_token, created_at, expires_in, refresh_token, scope, token_type`; `expires_in` 24 h for both code exchange and refresh. |
+| 4 | Browser `User-Agent` **not required** (a plain UA gets 200). **`Skylight-Api-Version` matters**: without it the server answers as `2026-01-01`. Always send it, and treat a different echo as "upstream API changed". |
+| 5 | Not provoked (no 429 seen; no `Retry-After` on any response). Still open. |
+| 6 | Recurring events are **expanded per occurrence** within the window: each row has a distinct id, composite **`<event id>-<unix start time>`** for occurrences, plain digits otherwise; `recurring=true` rows carry `rrule` as a list of `RRULE:…` strings; `master_event_id` is mostly null; `uid` is shared across occurrences. No duplicate ids. |
+| 7 | All-day events: `starts_at`/`ends_at` are full timestamps at **local midnight** with offset (`YYYY-MM-DDT00:00:00.000±hh:mm`), end = start + N days (exclusive end). Timed events use the same format with milliseconds. **`date_max` is exclusive**: the window is `[date_min, date_max)`; `date_min == date_max` returns nothing. |
+| 8 | Write behaviour not probed (v2). |
+
+Also observed: no pagination (`meta`/`links` absent) for 106 events over 37 days. With `include=categories`, events' relationship key is **`categories`** and `included` holds only `category` resources (attributes `label`, `color`, `linked_to_profile`, `selected_for_chore_chart`). **Without** it, the key is **`category`** (singular) and `included` still carries categories plus `event_notification_setting` and `calendar_account`: always send `include=categories` and parse only `categories`. Event attributes include `source` (`caldav`, `skylight`, `magic_import`, `ics_link`), `editable`, `status`, `kind="standard"`, `timezone`, `location`, `lat`/`lng`, `owner_email`, `invited_emails` (personal data: never log). 101 of 106 events carry a family member; 5 carry only non-member categories.
+
+**Design consequence for `get_event`:** an occurrence id encodes its start time (`<id>-<unix seconds>`), so the tool can derive a narrow window from the id itself; plain ids need the caller's `start`/`end` hint (or a default window).
+
+Still open (need care or the Lambda): old-refresh-token reuse, parallel refresh, refresh-token idle expiry, datacenter-IP blocking, 429 behaviour.
+
 1. `GET /categories?include_profiles=true` real shape (needed for `list_family_members`: id, name, colour).
 2. Whether any `GET /calendar_events/{id}` exists.
 3. Access-token lifetime, and whether refresh also returns a new `refresh_token` every time.

@@ -10,12 +10,15 @@ step() { printf '\n== %s\n' "$1"; }
 
 step "repo scan";  ./scripts/scan-repo.sh
 step "gofmt"
-unformatted="$(gofmt -l cmd internal infra/main.go)"
+unformatted="$(gofmt -l cmd internal infra/*.go)"
 if [ -n "$unformatted" ]; then echo "not gofmt-formatted:"; echo "$unformatted"; exit 1; fi
 echo ok
 step "go vet";     go vet ./...
 step "tests";      go test -race ./...
 step "infra vet";  (cd infra && go vet .)
+step "infra tests"
+mkdir -p dist/lambda && { [ -f dist/lambda/bootstrap ] || touch dist/lambda/bootstrap; }
+(cd infra && JSII_SILENCE_WARNING_UNTESTED_NODE_VERSION=1 go test .)
 if [ "${1:-}" != quick ]; then
   step "fuzz (short)"
   go test -run x -fuzz FuzzVerify -fuzztime 10s ./internal/auth

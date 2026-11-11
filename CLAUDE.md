@@ -36,7 +36,7 @@ Personal, single-user remote MCP server (Go, AWS Lambda `provided.al2023` arm64 
 ```
 ./scripts/check.sh [quick]                         # what CI runs, fail-fast: run before every commit and push
 go vet ./... && go test ./...                      # root module (infra/ is a separate module)
-test -z "$(gofmt -l cmd internal infra/main.go)"   # never `gofmt -l .` (crawls infra/node_modules)
+test -z "$(gofmt -l cmd internal infra/*.go)"   # never `gofmt -l .` (crawls infra/node_modules)
 (cd infra && go vet .)                             # never `./...` in infra/ (node_modules)
 go test -run x -fuzz FuzzVerify -fuzztime 20s ./internal/auth   # also FuzzAuthorize, FuzzParseEvents (calendar), FuzzExtractCode (skylight)
 go test ./internal/server -run Contract -update     # regenerate MCP golden files; review the diff

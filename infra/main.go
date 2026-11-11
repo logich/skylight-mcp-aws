@@ -401,6 +401,12 @@ func NewSkylightStack(scope constructs.Construct, id string, props *awscdk.Stack
 		AutoRollback:        &awscodedeploy.AutoRollbackConfig{FailedDeployment: jsii.Bool(true), StoppedDeployment: jsii.Bool(true)},
 	})
 	hookFn.GrantInvoke(deployGroup.Role())
+	// The alias update starts a CodeDeploy deployment, and CodeDeploy may only
+	// invoke the hook through the grant above (the AWS managed policy allows
+	// CodeDeployHook_* names only). Without this dependency CloudFormation ran
+	// the alias update in parallel with creating that policy, the hook could
+	// not be invoked, and the first pipeline deploy rolled back.
+	alias.Node().AddDependency(deployGroup.Role())
 	hookRole.AddToPolicy(awsiam.NewPolicyStatement(&awsiam.PolicyStatementProps{
 		Actions:   &[]*string{jsii.String("codedeploy:PutLifecycleEventHookExecutionStatus")},
 		Resources: &[]*string{deployGroup.DeploymentGroupArn()},

@@ -163,7 +163,17 @@ Also observed: no pagination (`meta`/`links` absent) for 106 events over 37 days
 
 **Design consequence for `get_event`:** an occurrence id encodes its start time (`<id>-<unix seconds>`), so the tool can derive a narrow window from the id itself; plain ids need the caller's `start`/`end` hint (or a default window).
 
-Still open (need care or the Lambda): old-refresh-token reuse, parallel refresh, refresh-token idle expiry, datacenter-IP blocking, 429 behaviour.
+**Rotation hazards** (`skylight-probe -hazards`, owner-approved, 2026-11-11). The server behaves like Rails Doorkeeper with `revoke_previous_refresh_token_on_use`:
+- A spent refresh token T1 **stays valid until the new access token (from T2's response) is first used**. Reusing T1 2 s and 90 s after rotation, without touching the new access token, was accepted and issued yet another new pair.
+- Once the new access token has been used, reusing T1 → **HTTP 400 `invalid_grant`**.
+- A rejected reuse **does not revoke the chain**: T2 and its access token kept working.
+- Two simultaneous refreshes of one token **both succeed** with different new refresh tokens; the first winner's token refreshes fine afterwards.
+
+Design consequences (PLAN §4):
+- **Order is commit, then use**: persist the new refresh token before the new access token is used. A crash after refresh but before commit loses nothing: the old token still works because the new access token was never used. Using the new access token before committing is the one way to lose the grant.
+- A refresh that gets `invalid_grant` most likely lost a race to another invocation that has since used its new token: re-read the store and retry with the stored token before declaring "re-authorise". The lease still matters, because without it two invocations can commit divergent tokens, and the one whose access token is used first revokes the other's parent.
+
+Still open (need the Lambda or time): refresh-token idle expiry, datacenter-IP blocking, 429 behaviour.
 
 1. `GET /categories?include_profiles=true` real shape (needed for `list_family_members`: id, name, colour).
 2. Whether any `GET /calendar_events/{id}` exists.

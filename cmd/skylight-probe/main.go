@@ -9,6 +9,8 @@
 //	go run ./cmd/skylight-probe            # uses the saved access token
 //	go run ./cmd/skylight-probe -refresh   # first spends the refresh token once
 //	                                       # (saved before use) to see rotation
+//	go run ./cmd/skylight-probe -hazards   # token reuse and parallel refresh;
+//	                                       # may revoke the grant (owner's OK)
 package main
 
 import (
@@ -38,15 +40,22 @@ func main() {
 	def, _ := skylight.DefaultTokenPath()
 	tokPath := flag.String("token", def, "saved grant")
 	doRefresh := flag.Bool("refresh", false, "spend the refresh token once first (rotation probe)")
+	doHazards := flag.Bool("hazards", false, "only run the reuse and parallel-refresh probes (may revoke the grant)")
+	reuseDelay := flag.Duration("reuse-delay", 2*time.Second, "with -hazards: wait this long before reusing the spent token")
+	useFirst := flag.Bool("use-first", false, "with -hazards: use the new access token before reusing the spent refresh token")
 	flag.Parse()
 
 	capDir = filepath.Join("captures", time.Now().UTC().Format("20060102T150405Z"))
 	must(os.MkdirAll(capDir, 0o700))
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Minute)
 	defer cancel()
 
 	saved, err := skylight.LoadFile(*tokPath)
 	must(err)
+	if *doHazards {
+		hazards(ctx, *tokPath, &saved, *reuseDelay, *useFirst)
+		return
+	}
 	expired := !saved.AccessExpiresAt.IsZero() && time.Now().After(saved.AccessExpiresAt.Add(-time.Minute))
 	if *doRefresh || expired || saved.AccessToken == "" {
 		refreshProbe(ctx, *tokPath, &saved)

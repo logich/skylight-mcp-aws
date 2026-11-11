@@ -1,0 +1,35 @@
+// Command server is the skylight-mcp Lambda entrypoint.
+package main
+
+import (
+	"log/slog"
+	"os"
+
+	"github.com/aws/aws-lambda-go/lambda"
+
+	"github.com/logich/skylight-mcp-aws/internal/auth"
+	"github.com/logich/skylight-mcp-aws/internal/lambdahttp"
+	"github.com/logich/skylight-mcp-aws/internal/server"
+)
+
+// version is set at build time: -ldflags "-X main.version=<git sha>".
+var version = "dev"
+
+func main() {
+	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
+
+	// Missing configuration is not fatal: auth.Authorize fails closed, so every
+	// MCP request is rejected until it is set.
+	h := server.New(server.Options{
+		Auth: auth.Config{
+			Issuer:     os.Getenv("AUTH_ISSUER"),
+			ClientID:   os.Getenv("AUTH_CLIENT_ID"),
+			AllowedSub: os.Getenv("AUTH_ALLOWED_SUB"),
+		},
+		AuthorizeURL: os.Getenv("AUTH_AUTHORIZE_URL"),
+		TokenURL:     os.Getenv("AUTH_TOKEN_URL"),
+		Version:      version,
+		Logger:       logger,
+	})
+	lambda.Start(lambdahttp.Handler(h))
+}

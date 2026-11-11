@@ -1,0 +1,7 @@
+{
+  "app": "go mod download && go run .",
+  "watch": { "include": ["**"], "exclude": ["README.md", "cdk*.json", "go.sum", "*_test.go"] },
+  "context": {
+    "@aws-cdk/aws-lambda:recognizeLayerVersion": true
+  }
+}

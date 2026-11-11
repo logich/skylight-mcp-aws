@@ -1,0 +1,24 @@
+# Build output
+/bootstrap
+/dist/
+*.zip
+cdk.out/
+
+# Secrets and local state: never commit
+.env
+.env.*
+*.pem
+*.key
+secret*.json
+token*.json
+.skylight/
+
+# Unscrubbed captures of real Skylight responses; only testdata/ (scrubbed) is committed
+/captures/
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
+
+node_modules/

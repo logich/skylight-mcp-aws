@@ -1,0 +1,58 @@
+# skylight-mcp
+
+Personal, single-user remote MCP server (Go, AWS Lambda `provided.al2023` arm64 + API Gateway HTTP API + Cognito) exposing a family Skylight calendar to Claude via a claude.ai custom connector. Read in this order: `SPEC.md` (requirements, owner-approved), `PLAN.md` (current plan and milestone status), `SKYLIGHT_API.md` (private API notes and unknowns), `docs/RETRO-step0.md` (why things are the way they are).
+
+## Hard rules
+
+- **The repo is public** (`logich/skylight-mcp-aws`). Never commit: credentials or tokens, the AWS account ID, the owner's email, Cognito pool/client IDs, the API hostname, real Skylight data. Personal values are deploy-time inputs only. Before every commit run a secret/identifier scan of the staged files (`git grep --cached` for the account ID, email, IDs, `AKIA…`).
+- **Never print secrets** into the terminal or session. Use `scripts/show-client-secret.sh secret` (copies to clipboard). Never ask the owner to paste secrets into chat.
+- **No live Skylight calls in tests or CI.** Fixtures must be scrubbed.
+- **Auth fails closed.** `internal/auth.Check` is the single entry point: bearer token → RS256 signature (Cognito JWKS) → claims (`iss`, `token_use=access`, `client_id`, scope `skylight-mcp/invoke`, `aud` = connector URL when present, `exp`, allowed `sub`). Never trust identity claims from the invocation event. Every auth change gets table tests with real signed tokens, a fuzz run, and a regression test for any attack it closes.
+- **Least privilege.** Deploys run as the `skylight-deploy` profile under the scoped CloudFormation execution policy (`infra/bootstrap/cfn-exec-policy.json`); every stack role carries `SkylightMcpRoleBoundary`. The admin profile `skylight-mcp` (a root console session) is for bootstrap and one-offs only. Never widen either policy to `*` actions or AdministratorAccess.
+- Write commands, AWS changes affecting other projects, pushes, and changes to the owner's connector need the owner's go-ahead.
+
+## Working rules (learned the hard way; see the retro)
+
+1. **Read primary sources before asking design questions.** Code beats docs: the iOS repo's API guide describes paths its own code never calls.
+2. **Verify before asserting** facts about the owner's accounts, AWS behaviour or third-party APIs. Check CLI output, schemas (`aws cloudformation describe-type`), templates (`cdk bootstrap --show-template`) and official docs. Say "unverified" otherwise.
+3. **For identity resources (Cognito, IAM), read the constraints before deploying.** Don't deploy to find out; replacements can change secrets or lose users.
+4. **The owner's connector test is the last check, not the first.** The authorized path can't be machine-tested without weakening single-user auth, so every reconnect is expensive. Before asking: unit tests pass, `scripts/smoke-oauth.sh` passes, logs checked. Batch auth changes into one reconnect.
+5. **Smoke tests mirror the real client.** Derive them from observed claude.ai traffic in the gateway access log, not from assumptions (the missing `resource` parameter cost a round trip).
+6. **Adversarial review covers code, not just plans.** Before a user-facing test or a security-relevant merge, review the actual diff adversarially (independent subagents only when the owner asks for them). Give reviewers raw evidence (logs, captured responses), not just a summary. Verify their claims before acting.
+7. **Every reviewer "if X then Y" warning becomes a test of X** before moving on.
+8. **Commit before deploy**, so the reported build version maps to a commit (not `-dirty`).
+9. **Observability before the first external test.** Gateway access logs exist; read them first when something fails (`aws logs tail /aws/apigateway/skylight-mcp`).
+10. **Give the owner exact, field-by-field instructions** with real (non-secret) values, and say what each page or email will look like. The owner may be on Remote Control; restate decisions as questions with choices.
+
+## Commands
+
+```
+go vet ./... && go test ./...                      # root module (infra/ is a separate module)
+test -z "$(gofmt -l cmd internal infra/main.go)"   # never `gofmt -l .` (crawls infra/node_modules)
+(cd infra && go vet .)                             # never `./...` in infra/ (node_modules)
+go test -run x -fuzz FuzzVerify -fuzztime 20s ./internal/auth
+./scripts/build.sh                                 # dist/lambda/bootstrap, version = git describe
+SKYLIGHT_ALLOWED_SUB="$(SKYLIGHT_USER_EMAIL=… ./scripts/get-sub.sh)" ./scripts/deploy.sh
+./scripts/smoke-oauth.sh                           # after every deploy
+CDK_DEFAULT_ACCOUNT=000000000000 npx cdk synth -q  # offline synth (in infra/), needs no personal data
+```
+
+`scripts/bootstrap-cdk.sh` (admin; re-run after editing `infra/bootstrap/*.json`), `create-cognito-user.sh`, `create-deploy-user.sh`, `show-client-secret.sh [url|id|secret]`.
+
+## Gotchas already paid for
+
+- claude.ai follows `authorization_servers` in the RFC 9728 document and needs RFC 8414 metadata there. Cognito only publishes OIDC discovery, so the server declares **itself** as the authorization server and serves `/.well-known/oauth-authorization-server`, which describes Cognito's endpoints and issues nothing.
+- claude.ai sends RFC 8707 `resource` = connector URL, so Cognito sets access-token `aud` to it, and refreshes keep it. The gateway JWT authorizer audience must include the connector URL as well as the client ID.
+- Cognito refresh-token rotation forbids `ALLOW_REFRESH_TOKEN_AUTH`; the client has an empty `ExplicitAuthFlows`.
+- `cdk bootstrap --custom-permissions-boundary` puts the boundary on the CloudFormation execution role itself, which breaks deploys. Don't use it; the exec policy enforces the boundary instead.
+- `cdk bootstrap` synthesises the app. The app requires `CDK_DEFAULT_ACCOUNT` (the Cognito domain prefix derives from it, and a wrong value would replace the domain).
+- HTTP API access-log formats must include `$context.requestId`.
+- Removing a CloudFormation-managed Cognito user: set `RETAIN` and deploy first, then remove it from the template.
+- Lambda account concurrency limit is 10, so no reserved concurrency. Skylight token rotation will use a DynamoDB lease (PLAN §4).
+- Skylight auth is OAuth code + PKCE (`client_id=skylight-mobile`, redirect `https://ourskylight.com/welcome`, codes expire in about 30 s) with a rotating refresh token tied to a device fingerprint. The iOS repo's password flow is obsolete.
+
+## Open follow-ups (from the retro, Part 3)
+
+- Tag-scope the region-wide grants in the execution policy (`apigateway`, `cognito-idp`, KMS key management, `logs:PutResourcePolicy`). Latent today: nothing else is deployed in us-east-2.
+- Stop routine deploys needing the admin session: store the allowed `sub` where the deploy user or CI can read it.
+- Reword SPEC §6 "single, small function" to "a small package with one entry point".

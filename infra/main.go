@@ -17,7 +17,9 @@ import (
 	"github.com/aws/aws-cdk-go/awscdk/v2/awsapigatewayv2authorizers"
 	"github.com/aws/aws-cdk-go/awscdk/v2/awsapigatewayv2integrations"
 	"github.com/aws/aws-cdk-go/awscdk/v2/awscognito"
+	"github.com/aws/aws-cdk-go/awscdk/v2/awsdynamodb"
 	"github.com/aws/aws-cdk-go/awscdk/v2/awsiam"
+	"github.com/aws/aws-cdk-go/awscdk/v2/awskms"
 	"github.com/aws/aws-cdk-go/awscdk/v2/awslambda"
 	"github.com/aws/aws-cdk-go/awscdk/v2/awslogs"
 	"github.com/aws/aws-cdk-go/awscdk/v2/awsssm"
@@ -145,7 +147,39 @@ func NewSkylightStack(scope constructs.Construct, id string, props *awscdk.Stack
 		Resources: &[]*string{logGroup.LogGroupArn()},
 	}))
 
+	// ---- Skylight grant store: one item, customer-managed key ------------
+	// The rotating Skylight refresh token lives here (PLAN §4). Retained on
+	// stack deletion: losing it means a human must redo skylight-login.
+	grantKey := awskms.NewKey(stack, jsii.String("GrantKey"), &awskms.KeyProps{
+		Alias:             jsii.String("alias/skylight-mcp-grant"),
+		Description:       jsii.String("skylight-mcp: encrypts the Skylight OAuth grant table"),
+		EnableKeyRotation: jsii.Bool(true),
+		RemovalPolicy:     awscdk.RemovalPolicy_RETAIN,
+	})
+	grantTable := awsdynamodb.NewTable(stack, jsii.String("GrantTable"), &awsdynamodb.TableProps{
+		TableName:          jsii.String("SkylightMcpGrant"),
+		PartitionKey:       &awsdynamodb.Attribute{Name: jsii.String("pk"), Type: awsdynamodb.AttributeType_STRING},
+		BillingMode:        awsdynamodb.BillingMode_PAY_PER_REQUEST,
+		Encryption:         awsdynamodb.TableEncryption_CUSTOMER_MANAGED,
+		EncryptionKey:      grantKey,
+		DeletionProtection: jsii.Bool(true),
+		RemovalPolicy:      awscdk.RemovalPolicy_RETAIN,
+	})
+	// Read and conditional update of the one item; no Put, Delete, Scan or
+	// Query (seeding is an admin one-off). KMS only through DynamoDB.
+	role.AddToPolicy(awsiam.NewPolicyStatement(&awsiam.PolicyStatementProps{
+		Actions:   &[]*string{jsii.String("dynamodb:GetItem"), jsii.String("dynamodb:UpdateItem")},
+		Resources: &[]*string{grantTable.TableArn()},
+	}))
+	role.AddToPolicy(awsiam.NewPolicyStatement(&awsiam.PolicyStatementProps{
+		Actions: &[]*string{jsii.String("kms:Decrypt"), jsii.String("kms:Encrypt"),
+			jsii.String("kms:GenerateDataKey"), jsii.String("kms:DescribeKey")},
+		Resources:  &[]*string{grantKey.KeyArn()},
+		Conditions: &map[string]any{"StringEquals": map[string]any{"kms:ViaService": "dynamodb." + region + ".amazonaws.com"}},
+	}))
+
 	env := map[string]*string{
+		"GRANT_TABLE": grantTable.TableName(),
 		"AUTH_ISSUER":    jsii.String(issuer),
 		"AUTH_CLIENT_ID": client.UserPoolClientId(),
 		"AUTH_SCOPE":     jsii.String(resourceServerID + "/" + scopeName),

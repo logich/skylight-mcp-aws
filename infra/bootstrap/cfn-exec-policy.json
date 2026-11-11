@@ -126,6 +126,19 @@
       "Condition": { "StringEquals": { "aws:ResourceTag/project": "skylight-mcp" } }
     },
     {
+      "Sid": "KmsGrantForDynamoDBTableEncryption",
+      "Effect": "Allow",
+      "Action": "kms:CreateGrant",
+      "Resource": "arn:aws:kms:us-east-2:${ACCOUNT}:key/*",
+      "Condition": {
+        "StringEquals": {
+          "aws:ResourceTag/project": "skylight-mcp",
+          "kms:ViaService": "dynamodb.us-east-2.amazonaws.com"
+        },
+        "Bool": { "kms:GrantIsForAWSResource": "true" }
+      }
+    },
+    {
       "Sid": "KmsOwnAliases",
       "Effect": "Allow",
       "Action": ["kms:CreateAlias", "kms:UpdateAlias", "kms:DeleteAlias"],

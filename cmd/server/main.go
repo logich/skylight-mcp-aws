@@ -3,6 +3,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -11,11 +12,18 @@ import (
 	"os"
 	"time"
 
+	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-lambda-go/lambda"
+	awsconfig "github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 
 	"github.com/logich/skylight-mcp-aws/internal/auth"
+	"github.com/logich/skylight-mcp-aws/internal/calendar"
+	"github.com/logich/skylight-mcp-aws/internal/canary"
+	"github.com/logich/skylight-mcp-aws/internal/grant"
 	"github.com/logich/skylight-mcp-aws/internal/lambdahttp"
 	"github.com/logich/skylight-mcp-aws/internal/server"
+	"github.com/logich/skylight-mcp-aws/internal/skylight"
 )
 
 // version is set at build time: -ldflags "-X main.version=<git sha>".
@@ -44,7 +52,51 @@ func main() {
 		Version:      version,
 		Logger:       logger,
 	})
-	lambda.Start(lambdahttp.Handler(h))
+	httpHandler := lambdahttp.Handler(h)
+
+	cal, tokens, err := skylightClient(context.Background())
+	if err != nil {
+		// Not fatal for the HTTP side: discovery and auth still work, and
+		// Skylight-backed calls report the configuration error.
+		logger.Error("skylight client not configured", "error", err.Error())
+	}
+
+	lambda.Start(func(ctx context.Context, raw json.RawMessage) (any, error) {
+		if canary.IsCanary(raw) {
+			if cal == nil {
+				return canary.Result{Version: version, Stage: "config", ErrorClass: "other", Error: "skylight client not configured"}, nil
+			}
+			r := canary.Run(ctx, tokens, cal, version, time.Now())
+			// Allowlisted fields only.
+			logger.Info("canary", "ok", r.OK, "stage", r.Stage, "error_class", r.ErrorClass,
+				"categories", r.Categories, "members", r.Members, "events_7_days", r.Events7Days,
+				"token_ms", r.TokenMs, "total_ms", r.TotalMs)
+			return r, nil
+		}
+		var ev events.APIGatewayV2HTTPRequest
+		if err := json.Unmarshal(raw, &ev); err != nil {
+			return events.APIGatewayV2HTTPResponse{StatusCode: http.StatusBadRequest, Body: "bad request"}, nil
+		}
+		return httpHandler(ctx, ev)
+	})
+}
+
+// skylightClient builds the grant manager and calendar client from the
+// environment (GRANT_TABLE) and the Lambda's role credentials.
+func skylightClient(ctx context.Context) (*calendar.Client, *grant.Manager, error) {
+	table := os.Getenv("GRANT_TABLE")
+	if table == "" {
+		return nil, nil, errors.New("GRANT_TABLE not set")
+	}
+	cfg, err := awsconfig.LoadDefaultConfig(ctx)
+	if err != nil {
+		return nil, nil, errors.New("loading AWS config failed")
+	}
+	tokens := &grant.Manager{
+		Store:     grant.DynamoStore{API: dynamodb.NewFromConfig(cfg), Table: table},
+		Refresher: skylight.TokenClient{},
+	}
+	return &calendar.Client{Tokens: tokens}, tokens, nil
 }
 
 // jwksFetcher returns a fetcher for the pool's published signing keys.

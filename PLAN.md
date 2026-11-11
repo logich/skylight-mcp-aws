@@ -35,7 +35,7 @@ Lessons, now baked into the code:
 - The JWT authorizer's 401 is a bare `Bearer` (no `resource_metadata`); claude.ai copes by falling back to the well-known path. Gateway access logs (method/path/status only) were added to see these gateway-answered requests.
 - Cognito's invitation email has no sign-in link; the temporary password is used on the hosted sign-in page the connector opens.
 - `cdk bootstrap` runs the app, so scripts pass a placeholder `userEmail`. Bootstrap used the default `AdministratorAccess` CloudFormation execution policy, so the deploy user can effectively deploy anything via CDK; tighten later.
-- Operational scripts: `scripts/bootstrap-cdk.sh` (admin, once), `deploy.sh` (needs `SKYLIGHT_USER_EMAIL`, `SKYLIGHT_ALLOWED_SUB`), `get-sub.sh`, `show-client-secret.sh`, `create-deploy-user.sh`.
+- Operational scripts: `scripts/bootstrap-cdk.sh` (admin, once), `deploy.sh` (needs `SKYLIGHT_USER_EMAIL`, `SKYLIGHT_ALLOWED_SUB`), `get-sub.sh`, `show-client-secret.sh`, `create-deploy-user.sh`. *(Superseded: `deploy.sh` now takes no inputs; the allowed sub lives in SSM, written once by `set-allowed-sub.sh`.)*
 
 > **Revised 2026-11-11** after the Step 0 retrospective ([docs/RETRO-step0.md](docs/RETRO-step0.md)); you accepted all six of its decisions. §3–§6 below are the revised plan.
 

@@ -1,10 +1,9 @@
 // Command infra is the CDK app for skylight-mcp.
 //
-// Deploy-time inputs come from CDK context (never committed, because this
-// repository is public):
-//
-//	-c userEmail=<address of the one Cognito user>
-//	-c allowedSub=<that user's Cognito sub>   (optional on first deploy)
+// It takes no personal inputs, so it synthesises without any (this repository
+// is public). The one deploy-time value, the allowed Cognito sub, lives in the
+// SSM parameter allowedSubParam (written once by scripts/set-allowed-sub.sh)
+// and CloudFormation resolves it at deploy time.
 package main
 
 import (
@@ -21,6 +20,7 @@ import (
 	"github.com/aws/aws-cdk-go/awscdk/v2/awsiam"
 	"github.com/aws/aws-cdk-go/awscdk/v2/awslambda"
 	"github.com/aws/aws-cdk-go/awscdk/v2/awslogs"
+	"github.com/aws/aws-cdk-go/awscdk/v2/awsssm"
 	"github.com/aws/constructs-go/constructs/v10"
 	"github.com/aws/jsii-runtime-go"
 )
@@ -29,6 +29,7 @@ const (
 	region           = "us-east-2"
 	resourceServerID = "skylight-mcp"
 	scopeName        = "invoke" // token scope: "skylight-mcp/invoke"
+	allowedSubParam  = "/skylight-mcp/allowed-sub"
 )
 
 // Claude's custom-connector OAuth callbacks.
@@ -37,20 +38,14 @@ var callbackURLs = []*string{
 	jsii.String("https://claude.com/api/mcp/auth_callback"),
 }
 
-func ctxString(scope constructs.Construct, key string) string {
-	if v, ok := scope.Node().TryGetContext(jsii.String(key)).(string); ok {
-		return v
-	}
-	return ""
-}
-
 func NewSkylightStack(scope constructs.Construct, id string, props *awscdk.StackProps) awscdk.Stack {
 	stack := awscdk.NewStack(scope, &id, props)
 
 	// Every taggable resource carries project=skylight-mcp. The CloudFormation
-	// execution policy only lets deploys touch Cognito user pools and KMS keys
-	// that carry this tag (or create them with it), so the tag is an access
-	// boundary, not decoration: never change or remove it.
+	// execution policy only lets deploys manage KMS keys that carry this tag
+	// (or create them with it), and only create user pools and HTTP APIs with
+	// it, so the tag is an access boundary, not decoration: never change or
+	// remove it.
 	awscdk.Tags_Of(stack).Add(jsii.String("project"), jsii.String("skylight-mcp"), nil)
 
 	// Every IAM role in this stack carries the boundary created by
@@ -58,12 +53,6 @@ func NewSkylightStack(scope constructs.Construct, id string, props *awscdk.Stack
 	// create or grant permissions to a role without it.
 	awsiam.PermissionsBoundary_Of(stack).Apply(
 		awsiam.ManagedPolicy_FromManagedPolicyName(stack, jsii.String("RoleBoundary"), jsii.String("SkylightMcpRoleBoundary")))
-
-	// Optional and transitional: only used to keep the original Cognito user
-	// resource (retained) until it is dropped from the template. New users are
-	// created by scripts/create-cognito-user.sh, so synth needs no email.
-	userEmail := ctxString(stack, "userEmail")
-	allowedSub := ctxString(stack, "allowedSub")
 
 	// ---- Cognito: one user, no self-signup, password + TOTP MFA ----------
 	pool := awscognito.NewUserPool(stack, jsii.String("Pool"), &awscognito.UserPoolProps{
@@ -139,21 +128,6 @@ func NewSkylightStack(scope constructs.Construct, id string, props *awscdk.Stack
 		"Feature": "ENABLED", "RetryGracePeriodSeconds": 60,
 	})
 
-	if userEmail != "" {
-		// Transitional: the Step 0 user, retained so that dropping it from the
-		// template (by deploying without -c userEmail) does not delete it.
-		u := awscognito.NewCfnUserPoolUser(stack, jsii.String("TheUser"), &awscognito.CfnUserPoolUserProps{
-			UserPoolId:             pool.UserPoolId(),
-			Username:               jsii.String(userEmail),
-			DesiredDeliveryMediums: &[]*string{jsii.String("EMAIL")},
-			UserAttributes: &[]*awscognito.CfnUserPoolUser_AttributeTypeProperty{
-				{Name: jsii.String("email"), Value: jsii.String(userEmail)},
-				{Name: jsii.String("email_verified"), Value: jsii.String("true")},
-			},
-		})
-		u.ApplyRemovalPolicy(awscdk.RemovalPolicy_RETAIN, nil)
-	}
-
 	issuer := fmt.Sprintf("https://cognito-idp.%s.amazonaws.com/%s", region, *pool.UserPoolId())
 
 	// ---- Lambda: least-privilege role, explicit log group ----------------
@@ -178,9 +152,11 @@ func NewSkylightStack(scope constructs.Construct, id string, props *awscdk.Stack
 		// Cognito hosted-UI endpoints, advertised in the metadata the server serves.
 		"AUTH_AUTHORIZE_URL": jsii.String(*domain.BaseUrl(nil) + "/oauth2/authorize"),
 		"AUTH_TOKEN_URL":     jsii.String(*domain.BaseUrl(nil) + "/oauth2/token"),
-	}
-	if allowedSub != "" {
-		env["AUTH_ALLOWED_SUB"] = jsii.String(allowedSub)
+		// Resolved by CloudFormation from SSM on every deploy (a template
+		// parameter of type AWS::SSM::Parameter::Value<String>), so neither the
+		// repository nor the deploy machine handles it. A missing parameter
+		// fails the deploy rather than shipping a server that rejects everyone.
+		"AUTH_ALLOWED_SUB": awsssm.StringParameter_ValueForStringParameter(stack, jsii.String(allowedSubParam), nil),
 	}
 	fn := awslambda.NewFunction(stack, jsii.String("Function"), &awslambda.FunctionProps{
 		FunctionName: jsii.String("skylight-mcp"),

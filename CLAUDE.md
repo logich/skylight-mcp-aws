@@ -38,12 +38,12 @@ test -z "$(gofmt -l cmd internal infra/main.go)"   # never `gofmt -l .` (crawls 
 (cd infra && go vet .)                             # never `./...` in infra/ (node_modules)
 go test -run x -fuzz FuzzVerify -fuzztime 20s ./internal/auth
 ./scripts/build.sh                                 # dist/lambda/bootstrap, version = git describe
-SKYLIGHT_ALLOWED_SUB="$(SKYLIGHT_USER_EMAIL=… ./scripts/get-sub.sh)" ./scripts/deploy.sh
+./scripts/deploy.sh                                # deploy user only; allowed sub comes from SSM
 ./scripts/smoke-oauth.sh                           # after every deploy
 CDK_DEFAULT_ACCOUNT=000000000000 npx cdk synth -q  # offline synth (in infra/), needs no personal data
 ```
 
-`scripts/bootstrap-cdk.sh` (admin; re-run after editing `infra/bootstrap/*.json`), `create-cognito-user.sh`, `create-deploy-user.sh`, `show-client-secret.sh [url|id|secret]`.
+Admin one-offs: `scripts/bootstrap-cdk.sh` (re-run after editing `infra/bootstrap/*.json`, after the first deploy, and after anything replaces the HTTP API or user pool; validate first with `scripts/check-exec-policy.sh`), `set-allowed-sub.sh` (writes SSM `/skylight-mcp/allowed-sub`; re-run if the Cognito user is replaced), `create-cognito-user.sh`, `create-deploy-user.sh`. Any time: `show-client-secret.sh [url|id|secret]`.
 
 ## Gotchas already paid for
 
@@ -55,10 +55,9 @@ CDK_DEFAULT_ACCOUNT=000000000000 npx cdk synth -q  # offline synth (in infra/), 
 - HTTP API access-log formats must include `$context.requestId`.
 - Removing a CloudFormation-managed Cognito user: set `RETAIN` and deploy first, then remove it from the template.
 - Lambda account concurrency limit is 10, so no reserved concurrency. Skylight token rotation will use a DynamoDB lease (PLAN §4).
+- The execution policy pins API Gateway and Cognito to this stack's API and pool **by id** (rendered at bootstrap, never committed). Tags can't do it: HTTP API routes/integrations can't be tagged (AWS documents tag inheritance only for REST APIs), and Access Analyzer reports `aws:ResourceTag` has no effect for `cognito-idp`. KMS keys are tag-scoped (`project=skylight-mcp`, set on every resource by the CDK app). `logs:PutResourcePolicy` can't be scoped at all; it is only allowed in first-deploy mode (API Gateway needs it once for access-log delivery). Check tag conditions with `scripts/check-exec-policy.sh` (Access Analyzer), not just the service reference.
 - Skylight auth is OAuth code + PKCE (`client_id=skylight-mobile`, redirect `https://ourskylight.com/welcome`, codes expire in about 30 s) with a rotating refresh token tied to a device fingerprint. The iOS repo's password flow is obsolete.
 
 ## Open follow-ups (from the retro, Part 3)
 
-- Tag-scope the region-wide grants in the execution policy (`apigateway`, `cognito-idp`, KMS key management, `logs:PutResourcePolicy`). Latent today: nothing else is deployed in us-east-2.
-- Stop routine deploys needing the admin session: store the allowed `sub` where the deploy user or CI can read it.
 - Reword SPEC §6 "single, small function" to "a small package with one entry point".

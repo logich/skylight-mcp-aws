@@ -10,17 +10,56 @@
       ]
     },
     {
-      "Sid": "ApiGateway",
+      "Sid": "ApiGatewayList",
       "Effect": "Allow",
-      "Action": "apigateway:*",
-      "Resource": "arn:aws:apigateway:us-east-2::/*"
+      "Action": "apigateway:GET",
+      "Resource": "arn:aws:apigateway:us-east-2::/apis"
     },
     {
-      "Sid": "Cognito",
+      "Sid": "ApiGatewayCreateTagged",
+      "Effect": "Allow",
+      "Action": "apigateway:POST",
+      "Resource": "arn:aws:apigateway:us-east-2::/apis",
+      "Condition": { "StringEquals": { "aws:RequestTag/project": "skylight-mcp" } }
+    },
+    {
+      "Sid": "ApiGatewayOwnApiOnly",
+      "Effect": "Allow",
+      "Action": "apigateway:*",
+      "Resource": [
+        "arn:aws:apigateway:us-east-2::/apis/${API_ID}",
+        "arn:aws:apigateway:us-east-2::/apis/${API_ID}/*",
+        "arn:aws:apigateway:us-east-2::/tags/*${API_ID}*"
+      ]
+    },
+    {
+      "Sid": "CognitoCreateTaggedPool",
+      "Effect": "Allow",
+      "Action": "cognito-idp:CreateUserPool",
+      "Resource": "*",
+      "Condition": {
+        "StringEquals": { "aws:RequestedRegion": "us-east-2", "aws:RequestTag/project": "skylight-mcp" }
+      }
+    },
+    {
+      "Sid": "CognitoOwnPoolOnly",
       "Effect": "Allow",
       "Action": "cognito-idp:*",
+      "Resource": "arn:aws:cognito-idp:us-east-2:${ACCOUNT}:userpool/${POOL_ID}"
+    },
+    {
+      "Sid": "CognitoReadOnlyWithoutResourceLevelSupport",
+      "Effect": "Allow",
+      "Action": ["cognito-idp:DescribeUserPoolDomain", "cognito-idp:ListUserPools"],
       "Resource": "*",
       "Condition": { "StringEquals": { "aws:RequestedRegion": "us-east-2" } }
+    },
+    {
+      "Sid": "NeverRemoveTheAccessTag",
+      "Effect": "Deny",
+      "Action": "kms:UntagResource",
+      "Resource": "*",
+      "Condition": { "ForAnyValue:StringEquals": { "aws:TagKeys": "project" } }
     },
     {
       "Sid": "LogGroups",
@@ -41,9 +80,14 @@
         "logs:UpdateLogDelivery",
         "logs:DeleteLogDelivery",
         "logs:ListLogDeliveries",
-        "logs:PutResourcePolicy",
         "logs:DescribeResourcePolicies"
       ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "LogsResourcePolicyFirstDeployOnly",
+      "Effect": "${FIRST_DEPLOY_EFFECT}",
+      "Action": "logs:PutResourcePolicy",
       "Resource": "*"
     },
     {
@@ -53,10 +97,18 @@
       "Resource": "arn:aws:dynamodb:us-east-2:${ACCOUNT}:table/SkylightMcp*"
     },
     {
-      "Sid": "KmsKeyManagementNoDataAccess",
+      "Sid": "KmsCreateTaggedKey",
+      "Effect": "Allow",
+      "Action": "kms:CreateKey",
+      "Resource": "*",
+      "Condition": {
+        "StringEquals": { "aws:RequestedRegion": "us-east-2", "aws:RequestTag/project": "skylight-mcp" }
+      }
+    },
+    {
+      "Sid": "KmsManageTaggedKeysNoDataAccess",
       "Effect": "Allow",
       "Action": [
-        "kms:CreateKey",
         "kms:DescribeKey",
         "kms:GetKeyPolicy",
         "kms:PutKeyPolicy",
@@ -68,9 +120,21 @@
         "kms:ListResourceTags",
         "kms:CreateAlias",
         "kms:UpdateAlias",
-        "kms:DeleteAlias",
-        "kms:ListAliases"
+        "kms:DeleteAlias"
       ],
+      "Resource": "arn:aws:kms:us-east-2:${ACCOUNT}:key/*",
+      "Condition": { "StringEquals": { "aws:ResourceTag/project": "skylight-mcp" } }
+    },
+    {
+      "Sid": "KmsOwnAliases",
+      "Effect": "Allow",
+      "Action": ["kms:CreateAlias", "kms:UpdateAlias", "kms:DeleteAlias"],
+      "Resource": "arn:aws:kms:us-east-2:${ACCOUNT}:alias/skylight-mcp*"
+    },
+    {
+      "Sid": "KmsListAliases",
+      "Effect": "Allow",
+      "Action": "kms:ListAliases",
       "Resource": "*",
       "Condition": { "StringEquals": { "aws:RequestedRegion": "us-east-2" } }
     },
@@ -136,6 +200,7 @@
       "Action": ["ssm:GetParameters", "ssm:GetParameter", "s3:GetObject"],
       "Resource": [
         "arn:aws:ssm:us-east-2:${ACCOUNT}:parameter/cdk-bootstrap/hnb659fds/version",
+        "arn:aws:ssm:us-east-2:${ACCOUNT}:parameter/skylight-mcp/*",
         "arn:aws:s3:::cdk-hnb659fds-assets-${ACCOUNT}-us-east-2/*"
       ]
     }

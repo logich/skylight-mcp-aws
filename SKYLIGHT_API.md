@@ -173,7 +173,9 @@ Design consequences (PLAN §4):
 - **Order is commit, then use**: persist the new refresh token before the new access token is used. A crash after refresh but before commit loses nothing: the old token still works because the new access token was never used. Using the new access token before committing is the one way to lose the grant.
 - A refresh that gets `invalid_grant` most likely lost a race to another invocation that has since used its new token: re-read the store and retry with the stored token before declaring "re-authorise". The lease still matters, because without it two invocations can commit divergent tokens, and the one whose access token is used first revokes the other's parent.
 
-Still open (need the Lambda or time): refresh-token idle expiry, datacenter-IP blocking, 429 behaviour.
+**From AWS Lambda** (us-east-2, canary invoke, 2026-11-11): no datacenter-IP blocking. API reads (frames list, categories, 7-day events) and a token refresh both succeed from Lambda with a plain `User-Agent`; the lease/commit cycle ran as designed (generation 0 → 1, lease released, new 24 h token used only after the commit).
+
+Still open (need time): refresh-token idle expiry, 429 behaviour.
 
 1. `GET /categories?include_profiles=true` real shape (needed for `list_family_members`: id, name, colour).
 2. Whether any `GET /calendar_events/{id}` exists.

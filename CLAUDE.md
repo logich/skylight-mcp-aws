@@ -40,10 +40,12 @@ go test -run x -fuzz FuzzVerify -fuzztime 20s ./internal/auth
 ./scripts/build.sh                                 # dist/lambda/bootstrap, version = git describe
 ./scripts/deploy.sh                                # deploy user only; allowed sub comes from SSM
 ./scripts/smoke-oauth.sh                           # after every deploy
+aws lambda invoke --profile skylight-mcp --region us-east-2 --function-name skylight-mcp:live \
+  --cli-binary-format raw-in-base64-out --payload '{"skylight_mcp_canary":true}' /dev/stdout   # Skylight path from AWS: counts only
 CDK_DEFAULT_ACCOUNT=000000000000 npx cdk synth -q  # offline synth (in infra/), needs no personal data
 ```
 
-Admin one-offs: `scripts/bootstrap-cdk.sh` (re-run after editing `infra/bootstrap/*.json`, after the first deploy, and after anything replaces the HTTP API or user pool; validate first with `scripts/check-exec-policy.sh`), `set-allowed-sub.sh` (writes SSM `/skylight-mcp/allowed-sub`; re-run if the Cognito user is replaced), `create-cognito-user.sh`, `create-deploy-user.sh`. Any time: `show-client-secret.sh [url|id|secret]`.
+Admin one-offs: `scripts/bootstrap-cdk.sh` (re-run after editing `infra/bootstrap/*.json`, after the first deploy, and after anything replaces the HTTP API or user pool; validate first with `scripts/check-exec-policy.sh`), `set-allowed-sub.sh` (writes SSM `/skylight-mcp/allowed-sub`; re-run if the Cognito user is replaced), `create-cognito-user.sh`, `create-deploy-user.sh`. Skylight re-authorisation: `go run ./cmd/skylight-login -force` (browser, catch the code in DevTools), then `go run ./cmd/skylight-store-import -overwrite` (moves it into the `SkylightMcpGrant` table and deletes the local copy). Any time: `show-client-secret.sh [url|id|secret]`.
 
 ## Gotchas already paid for
 
@@ -54,7 +56,9 @@ Admin one-offs: `scripts/bootstrap-cdk.sh` (re-run after editing `infra/bootstra
 - `cdk bootstrap` synthesises the app. The app requires `CDK_DEFAULT_ACCOUNT` (the Cognito domain prefix derives from it, and a wrong value would replace the domain).
 - HTTP API access-log formats must include `$context.requestId`.
 - Removing a CloudFormation-managed Cognito user: set `RETAIN` and deploy first, then remove it from the template.
-- Lambda account concurrency limit is 10, so no reserved concurrency. Skylight token rotation will use a DynamoDB lease (PLAN §4).
+- Lambda account concurrency limit is 10, so no reserved concurrency. Skylight token rotation uses a DynamoDB lease (`internal/grant`).
+- Skylight behaves like Doorkeeper `revoke_previous_refresh_token_on_use`: a spent refresh token stays valid until the new access token is first used. **Commit new tokens before using the new access token**; never keep a second live copy of the grant (the table is the only holder).
+- Laptop probes (`skylight-probe`) need the local grant file, which `skylight-store-import` deletes. Use the canary for live checks instead.
 - The execution policy pins API Gateway and Cognito to this stack's API and pool **by id** (rendered at bootstrap, never committed). Tags can't do it: HTTP API routes/integrations can't be tagged (AWS documents tag inheritance only for REST APIs), and Access Analyzer reports `aws:ResourceTag` has no effect for `cognito-idp`. KMS keys are tag-scoped (`project=skylight-mcp`, set on every resource by the CDK app). `logs:PutResourcePolicy` can't be scoped at all; it is only allowed in first-deploy mode (API Gateway needs it once for access-log delivery). Check tag conditions with `scripts/check-exec-policy.sh` (Access Analyzer), not just the service reference.
 - Skylight auth is OAuth code + PKCE (`client_id=skylight-mobile`, redirect `https://ourskylight.com/welcome`, codes expire in about 30 s) with a rotating refresh token tied to a device fingerprint. The iOS repo's password flow is obsolete.
 

@@ -6,7 +6,13 @@ Personal, single-user remote MCP server (Go, AWS Lambda `provided.al2023` arm64 
 
 - **The repo is public** (`logich/skylight-mcp-aws`). Never commit: credentials or tokens, the AWS account ID, the owner's email, Cognito pool/client IDs, the API hostname, real Skylight data. Personal values are deploy-time inputs only. Before every commit run a secret/identifier scan of the staged files (`git grep --cached` for the account ID, email, IDs, `AKIA…`).
 - **Never print secrets** into the terminal or session. Use `scripts/show-client-secret.sh secret` (copies to clipboard). Never ask the owner to paste secrets into chat.
-- **No live Skylight calls in tests or CI.** Fixtures must be scrubbed.
+- **Automated tests and CI never call Skylight.** Manual probes by the owner or a session (e.g. `skylight-login`, milestone 3) are fine; their captures become scrubbed fixtures that tests replay. Why:
+  - The refresh token rotates and is tied to one device fingerprint. A test refresh can invalidate the Lambda's token or race it outside the DynamoDB lease, and reuse may revoke the whole chain (unverified).
+  - The repo is public: CI would need Skylight credentials as secrets, and a failing test could print real family data into public Actions logs.
+  - It is a private, unofficial API with unknown rate limits and IP blocking; repeated runs from shared CI runner IPs risk flagging the account.
+  - A live calendar changes daily, so assertions would be flaky; fixtures are deterministic.
+  - Once v2 writes exist, a live test could change the real family calendar.
+  - The production canary is the one scheduled live caller: it runs inside AWS through the same token store and lease as the server.
 - **Auth fails closed.** `internal/auth.Check` is the single entry point: bearer token → RS256 signature (Cognito JWKS) → claims (`iss`, `token_use=access`, `client_id`, scope `skylight-mcp/invoke`, `aud` = connector URL when present, `exp`, allowed `sub`). Never trust identity claims from the invocation event. Every auth change gets table tests with real signed tokens, a fuzz run, and a regression test for any attack it closes.
 - **Least privilege.** Deploys run as the `skylight-deploy` profile under the scoped CloudFormation execution policy (`infra/bootstrap/cfn-exec-policy.json`); every stack role carries `SkylightMcpRoleBoundary`. The admin profile `skylight-mcp` (a root console session) is for bootstrap and one-offs only. Never widen either policy to `*` actions or AdministratorAccess.
 - Write commands, AWS changes affecting other projects, pushes, and changes to the owner's connector need the owner's go-ahead.

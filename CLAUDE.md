@@ -26,13 +26,15 @@ Personal, single-user remote MCP server (Go, AWS Lambda `provided.al2023` arm64 
 5. **Smoke tests mirror the real client.** Derive them from observed claude.ai traffic in the gateway access log, not from assumptions (the missing `resource` parameter cost a round trip).
 6. **Adversarial review covers code, not just plans.** Before a user-facing test or a security-relevant merge, review the actual diff adversarially (independent subagents only when the owner asks for them). Give reviewers raw evidence (logs, captured responses), not just a summary. Verify their claims before acting.
 7. **Every reviewer "if X then Y" warning becomes a test of X** before moving on.
-8. **Commit before deploy**, so the reported build version maps to a commit (not `-dirty`).
-9. **Observability before the first external test.** Gateway access logs exist; read them first when something fails (`aws logs tail /aws/apigateway/skylight-mcp`).
-10. **Give the owner exact, field-by-field instructions** with real (non-secret) values, and say what each page or email will look like. The owner may be on Remote Control; restate decisions as questions with choices.
+8. **Check with `scripts/check.sh`, never a hand-chained command line.** A chain of `&&` and `;` once let a gofmt failure pass silently and broke the first pipeline run.
+9. **Commit before deploy**, so the reported build version maps to a commit (not `-dirty`).
+10. **Observability before the first external test.** Gateway access logs exist; read them first when something fails (`aws logs tail /aws/apigateway/skylight-mcp`).
+11. **Give the owner exact, field-by-field instructions** with real (non-secret) values, and say what each page or email will look like. The owner may be on Remote Control; restate decisions as questions with choices.
 
 ## Commands
 
 ```
+./scripts/check.sh [quick]                         # what CI runs, fail-fast: run before every commit and push
 go vet ./... && go test ./...                      # root module (infra/ is a separate module)
 test -z "$(gofmt -l cmd internal infra/main.go)"   # never `gofmt -l .` (crawls infra/node_modules)
 (cd infra && go vet .)                             # never `./...` in infra/ (node_modules)

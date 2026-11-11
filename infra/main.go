@@ -187,7 +187,7 @@ func NewSkylightStack(scope constructs.Construct, id string, props *awscdk.Stack
 	}))
 
 	env := map[string]*string{
-		"GRANT_TABLE": grantTable.TableName(),
+		"GRANT_TABLE":    grantTable.TableName(),
 		"AUTH_ISSUER":    jsii.String(issuer),
 		"AUTH_CLIENT_ID": client.UserPoolClientId(),
 		"AUTH_SCOPE":     jsii.String(resourceServerID + "/" + scopeName),

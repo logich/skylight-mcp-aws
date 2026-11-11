@@ -6,16 +6,19 @@
 //
 //	go run ./cmd/skylight-login
 //
-// It opens Skylight's sign-in page. After you sign in, the browser lands on
-// https://ourskylight.com/welcome?code=… (the page itself may look blank or
-// like Skylight's home page). Copy the whole address and paste it here within
-// about 30 seconds; the code is exchanged at once.
+// It opens Skylight's sign-in page. After you sign in, Skylight redirects to
+// https://ourskylight.com/welcome?code=…, but that page is a JavaScript app
+// that rewrites the address bar at once, so catch the code in the browser's
+// developer tools (Network tab, "Preserve log", filter "welcome") and paste
+// that request's URL within about 30 seconds.
 //
-// Import an existing refresh token instead (from stdin, bare or as JSON with
-// refresh_token and optionally device_fingerprint); it is spent once to check
-// it works, and the rotated result is saved:
+// Import instead (no race): sign in to the Skylight web app, copy the Local
+// Storage value "auth-storage" from developer tools (or a bare refresh token,
+// or JSON with refresh_token and device_fingerprint), then:
 //
 //	pbpaste | go run ./cmd/skylight-login -import
+//
+// The token is spent once to check it works and the rotated result is saved.
 //
 // Run it in your own terminal, not through a chat session's shell prompt, so
 // nothing you paste lands in a transcript.
@@ -24,7 +27,6 @@ package main
 import (
 	"bufio"
 	"context"
-	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -93,9 +95,13 @@ func signIn(ctx context.Context, tc skylight.TokenClient, noOpen bool) (skylight
 	fmt.Println()
 	fmt.Println("   " + u)
 	fmt.Println()
-	fmt.Println("2. The browser then lands on https://ourskylight.com/welcome?code=…")
-	fmt.Println("   Copy the WHOLE address from the address bar and paste it below.")
-	fmt.Println("   The code expires in about 30 seconds, so paste right away.")
+	fmt.Println("   BEFORE signing in, open the developer tools on that tab (Cmd+Option+I),")
+	fmt.Println("   choose Network, tick \"Preserve log\", and type \"welcome\" in the filter.")
+	fmt.Println("2. After you sign in, Skylight redirects to https://ourskylight.com/welcome?code=…")
+	fmt.Println("   The page rewrites the address bar at once, so take the URL from the Network")
+	fmt.Println("   tab instead: click the \"welcome?code=…\" request and copy its Request URL")
+	fmt.Println("   (or right-click it > Copy > Copy URL). Paste it below within ~30 seconds.")
+	fmt.Println("   (No race alternative: skylight-login -import; see the command's doc.)")
 	if !noOpen && runtime.GOOS == "darwin" {
 		_ = exec.Command("open", u).Start()
 	}
@@ -125,20 +131,9 @@ func importToken(ctx context.Context, tc skylight.TokenClient, r io.Reader) (sky
 	if err != nil {
 		return skylight.Saved{}, skylight.TokenResponse{}, err
 	}
-	text := strings.Trim(strings.TrimSpace(string(b)), `'"`)
-	var in struct {
-		RefreshToken      string `json:"refresh_token"`
-		DeviceFingerprint string `json:"device_fingerprint"`
-	}
-	if strings.HasPrefix(text, "{") {
-		if err := json.Unmarshal([]byte(text), &in); err != nil {
-			return skylight.Saved{}, skylight.TokenResponse{}, errors.New("stdin looks like JSON but does not parse")
-		}
-	} else {
-		in.RefreshToken = text
-	}
-	if len(in.RefreshToken) < 20 || strings.ContainsAny(in.RefreshToken, " \t\r\n") {
-		return skylight.Saved{}, skylight.TokenResponse{}, errors.New("stdin does not look like a refresh token")
+	var in struct{ RefreshToken, DeviceFingerprint string }
+	if in.RefreshToken, in.DeviceFingerprint, err = skylight.ParseTokenInput(string(b)); err != nil {
+		return skylight.Saved{}, skylight.TokenResponse{}, err
 	}
 	if in.DeviceFingerprint == "" {
 		// The token may be bound to the fingerprint it was issued with; without

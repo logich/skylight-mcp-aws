@@ -10,7 +10,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/config v1.33.18
 	github.com/aws/aws-sdk-go-v2/service/codedeploy v1.47.0
 	github.com/aws/aws-sdk-go-v2/service/dynamodb v1.74.0
-	github.com/aws/aws-sdk-go-v2/service/lambda v1.114.4
+	github.com/aws/aws-sdk-go-v2/service/lambda v1.115.0
 	github.com/modelcontextprotocol/go-sdk v1.8.0
 )
 

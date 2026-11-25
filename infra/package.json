@@ -3,6 +3,6 @@
   "private": true,
   "description": "Pins the CDK CLI. The infrastructure itself is Go (see main.go).",
   "devDependencies": {
-    "aws-cdk": "2.1148.1"
+    "aws-cdk": "2.1149.0"
   }
 }
